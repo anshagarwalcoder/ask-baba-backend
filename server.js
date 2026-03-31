@@ -40,7 +40,10 @@ function getLagna(hour) {
   ];
   return signs[Math.floor(hour / 2) % 12];
 }
-
+app.post("/chat", (req, res, next) => {
+  console.log("🔥 /chat HIT HOYA");
+  next();
+});
 /* 💬 CHAT API */
 app.post("/chat", async (req, res) => {
   const { message, name, dob, time, place } = req.body;
@@ -63,7 +66,7 @@ app.post("/chat", async (req, res) => {
         "X-Title": "Ask Baba"
       },
       body: JSON.stringify({
-        model: "openai/gpt-3.5-turbo-0125",
+        model: "openai/gpt-3.5-turbo",
         messages: [
           {
             role: "system",
