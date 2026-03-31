@@ -57,7 +57,7 @@ app.post("/chat", async (req, res) => {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "Authorization": "Bearer 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",
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
@@ -102,7 +102,7 @@ IMPORTANT:
     if (!response.ok) throw new Error("API error");
 
     const data = await response.json();
-    console.log(data);
+    console.log("API RESPONSE:",data);
 
     let reply = "🔮 Baba dhyaan laga rahe hain...";
 
@@ -113,7 +113,8 @@ IMPORTANT:
     res.json({ reply, sunSign, lagna });
 
   } catch (err) {
-    console.log(err);
+    
+    console.log("ERROR:",err);
 
     res.json({
       reply: "🔮 Baba keh rahe hain... thoda samay baad phir poochiye."
