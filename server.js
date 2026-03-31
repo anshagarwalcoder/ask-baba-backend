@@ -32,7 +32,7 @@ function getSunSign(day, month) {
   if ((month == 7 && day >= 23) || (month == 8 && day <= 22)) return "Leo";
 }
 
-/* 🔥 SIMPLE LAGNA */
+/* 🔥 LAGNA */
 function getLagna(hour) {
   const signs = [
     "Aries","Taurus","Gemini","Cancer","Leo","Virgo",
@@ -40,10 +40,29 @@ function getLagna(hour) {
   ];
   return signs[Math.floor(hour / 2) % 12];
 }
+
+/* 🔮 CATEGORY DETECTOR */
+function detectCategory(message) {
+  message = message.toLowerCase();
+
+  if (message.includes("love") || message.includes("pyar") || message.includes("relationship"))
+    return "LOVE";
+
+  if (message.includes("career") || message.includes("job") || message.includes("future"))
+    return "CAREER";
+
+  if (message.includes("money") || message.includes("paise") || message.includes("income"))
+    return "MONEY";
+
+  return "GENERAL";
+}
+
+/* 🔥 DEBUG */
 app.post("/chat", (req, res, next) => {
   console.log("🔥 /chat HIT HOYA");
   next();
 });
+
 /* 💬 CHAT API */
 app.post("/chat", async (req, res) => {
   const { message, name, dob, time, place } = req.body;
@@ -53,9 +72,10 @@ app.post("/chat", async (req, res) => {
 
   const sunSign = getSunSign(parseInt(day), parseInt(month));
   const lagna = getLagna(hour);
+  const category = detectCategory(message);
 
   try {
-    console.log("ENV KEY:", process.env.OPENROUTER_API_KEY); // debug
+    console.log("ENV KEY:", process.env.OPENROUTER_API_KEY);
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -67,34 +87,54 @@ app.post("/chat", async (req, res) => {
       },
       body: JSON.stringify({
         model: "openai/gpt-3.5-turbo",
+        temperature: 0.8,
         messages: [
           {
             role: "system",
             content: `
-You are a highly accurate Indian astrologer.
+Tum ek experienced Bharatiya jyotish acharya ho.
 
-STRICT RULES:
-- Only answer what user asked
-- No extra explanation
-- No motivational lines
-- Keep answers short and direct
-- Use Hinglish
+RULES:
+- Hinglish use karo
+- Answer personal ho
+- Kabhi bhi "grah sthiti aspasht" mat bolo
+- Confident tone rakho
+- Short but impactful
+- Har baar naya jawab
 
-User Details:
+STYLE:
+- Start: "Dekhiye ${name},"
+- Astrology words use karo:
+  (Shani, Guru, Rahu, lagna, grah prabhav)
+
+USER DETAILS:
 Name: ${name}
 DOB: ${dob}
 Time: ${time}
 Place: ${place}
 Sun Sign: ${sunSign}
 Lagna: ${lagna}
+
+CATEGORY: ${category}
+
+Agar:
+- LOVE → relationship focus
+- CAREER → job/growth
+- MONEY → finance
+- GENERAL → overall life
 `
           },
-          { role: "user", content: message }
+          {
+            role: "user",
+            content: message
+          }
         ]
       })
     });
 
     const data = await response.json();
+
+    console.log("STATUS:", response.status);
     console.log("FULL API RESPONSE:", data);
 
     if (!response.ok) {
@@ -114,8 +154,6 @@ Lagna: ${lagna}
     res.json({ reply, sunSign, lagna });
 
   } catch (err) {
-    console.log("API KEY:", process.env.OPENROUTER_API_KEY); // debug
-    console.log("STATUS:", response.status);
     console.log("ERROR:", err);
 
     res.json({
@@ -141,9 +179,19 @@ app.post("/kundli", (req, res) => {
   doc.text(`Place: ${place}`);
   doc.moveDown();
 
-  doc.text("Analysis:");
-  doc.text("Aapka swabhav strong hai.");
-  doc.text("Aap life me kuch bada karoge.");
+  doc.text("🔮 Grah Vishleshan:");
+  doc.text("- Shani ka prabhav dhairya sikha raha hai");
+  doc.text("- Guru aapko growth de raha hai");
+  doc.text("- Rahu sudden changes la sakta hai");
+
+  doc.text("\n💖 Love Life:");
+  doc.text("Relationship me ups & downs but strong bond");
+
+  doc.text("\n💼 Career:");
+  doc.text("Next 6 months growth ke chances high");
+
+  doc.text("\n💰 Money:");
+  doc.text("Financial stability aayegi dheere dheere");
 
   doc.end();
 
@@ -152,7 +200,7 @@ app.post("/kundli", (req, res) => {
   }, 1000);
 });
 
-/* 📤 IMAGE UPLOAD */
+/* 📤 UPLOAD */
 app.post("/upload", upload.single("file"), (req, res) => {
   res.json({ message: "Kundli uploaded ✅" });
 });
