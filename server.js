@@ -111,6 +111,8 @@ Lagna: ${lagna}
     res.json({ reply, sunSign, lagna });
 
   } catch (err) {
+    console.log("API KEY:", process.env.OPENROUTER_API_KEY); // debug
+    console.log("STATUS:", response.status);
     console.log("ERROR:", err);
 
     res.json({
