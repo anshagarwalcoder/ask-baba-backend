@@ -1,8 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const fetch = (...args) => 
-import('node-fetch').then(({default: 
-fetch}) => fetch(...args));
+
 const PDFDocument = require("pdfkit");
 const multer = require("multer");
 const fs = require("fs");
@@ -56,7 +55,7 @@ app.post("/chat", async (req, res) => {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": "Bearer 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",
+        "Authorization": `Bearer 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`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
@@ -101,6 +100,7 @@ IMPORTANT:
     if (!response.ok) throw new Error("API error");
 
     const data = await response.json();
+    console.log(data);
 
     let reply = "🔮 Baba dhyaan laga rahe hain...";
 
