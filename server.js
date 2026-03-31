@@ -1,9 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const fetch = (...args) =>
-import("node-fetch").then(({ default: 
-fetch }) => fetch(...args));
-
+  import("node-fetch").then(({ default: fetch }) => fetch(...args));
 const PDFDocument = require("pdfkit");
 const multer = require("multer");
 const fs = require("fs");
@@ -47,37 +45,37 @@ function getLagna(hour) {
 app.post("/chat", async (req, res) => {
   const { message, name, dob, time, place } = req.body;
 
-  const [day, month, year] = dob.split("/");
+  const [day, month] = dob.split("/");
   const hour = parseInt(time.split(":")[0]);
 
   const sunSign = getSunSign(parseInt(day), parseInt(month));
   const lagna = getLagna(hour);
 
   try {
+    console.log("ENV KEY:", process.env.OPENROUTER_API_KEY); // debug
+
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": "Bearer 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",
-        "Content-Type": "application/json"
+        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://ask-baba-app.onrender.com",
+        "X-Title": "Ask Baba"
       },
       body: JSON.stringify({
         model: "openai/gpt-3.5-turbo-0125",
         messages: [
           {
             role: "system",
-content: `
+            content: `
 You are a highly accurate Indian astrologer.
 
 STRICT RULES:
 - Only answer what user asked
 - No extra explanation
-- No motivational or generic lines
-- No unnecessary advice
-- Keep answers short, direct and specific
-- If user asks for kundli → give kundli details only
-- If user asks question → answer only that question
-- Use Hinglish (simple Hindi tone)
-- Sound confident like real pandit
+- No motivational lines
+- Keep answers short and direct
+- Use Hinglish
 
 User Details:
 Name: ${name}
@@ -86,12 +84,6 @@ Time: ${time}
 Place: ${place}
 Sun Sign: ${sunSign}
 Lagna: ${lagna}
-
-IMPORTANT:
-- Do not say "mehnat karo", "sab theek hoga"
-- Do not add extra lines
-- Do not repeat
-- Only exact answer
 `
           },
           { role: "user", content: message }
@@ -99,25 +91,30 @@ IMPORTANT:
       })
     });
 
-    if (!response.ok) throw new Error("API error");
-
     const data = await response.json();
-    console.log("API RESPONSE:",data);
+    console.log("FULL API RESPONSE:", data);
+
+    if (!response.ok) {
+      return res.json({
+        reply: "❌ API Error aa raha hai"
+      });
+    }
 
     let reply = "🔮 Baba dhyaan laga rahe hain...";
 
     if (data?.choices?.length > 0) {
       reply = data.choices[0].message.content;
+    } else {
+      reply = "❌ AI ne response nahi diya";
     }
 
     res.json({ reply, sunSign, lagna });
 
   } catch (err) {
-    
-    console.log("ERROR:",err);
+    console.log("ERROR:", err);
 
     res.json({
-      reply: "🔮 Baba keh rahe hain... thoda samay baad phir poochiye."
+      reply: "❌ Server error aa gaya"
     });
   }
 });
@@ -142,7 +139,6 @@ app.post("/kundli", (req, res) => {
   doc.text("Analysis:");
   doc.text("Aapka swabhav strong hai.");
   doc.text("Aap life me kuch bada karoge.");
-  doc.text("Kabhi kabhi confusion aata hai lekin destiny strong hai.");
 
   doc.end();
 
