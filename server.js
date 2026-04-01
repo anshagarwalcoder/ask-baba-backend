@@ -20,6 +20,8 @@ app.get("/", (req, res) => {
   res.send("🚀 Ask Baba Backend Running");
 });
 
+const upload = multer({ dest: "uploads/" });
+
 /* 🌍 LOCATION */
 const locationMap = {
   Agra: { lat: 27.1767, lon: 78.0081 },
@@ -33,7 +35,7 @@ function getJulianDay(dob, time) {
   return swe.swe_julday(year, month, day, hour + minute / 60, swe.SE_GREG_CAL);
 }
 
-/* 🪐 PLANETS (SIDEREAL) */
+/* 🪐 PLANETS */
 function getPlanets(jd) {
   const planets = {
     Sun: swe.SE_SUN,
@@ -75,7 +77,7 @@ function getRashi(deg) {
   return rashis[Math.floor(deg / 30)];
 }
 
-/* 🌙 NAKSHATRA + PADA */
+/* 🌙 NAKSHATRA */
 const nakshatras = [
 "Ashwini","Bharani","Krittika","Rohini","Mrigashira",
 "Ardra","Punarvasu","Pushya","Ashlesha","Magha",
@@ -158,64 +160,55 @@ function generateKundli(dob, time, place) {
   return kundli;
 }
 
-/* 💍 MARRIAGE */
-function marriagePrediction(kundli) {
-  const venus = kundli.Venus.house;
-
-  if (venus === 7) return "Strong marriage yog 💍";
-  if ([6,8,12].includes(venus)) return "Marriage delay possible ⚠";
-  if (["Venus","Moon"].includes(kundli.Dasha.current)) return "Marriage time active 💍";
-
-  return "Normal marriage 👍";
+/* 🔥 FALLBACK */
+function generateFallback(kundli) {
+  return `Aapka Lagna ${kundli.Lagna.rashi} hai aur ${kundli.Dasha.current} dasha chal rahi hai. Thoda patience rakhein, situation improve hogi.`;
 }
 
-/* ⚠ MANGAL DOSH */
-function isManglik(kundli) {
-  return [1,4,7,8,12].includes(kundli.Mars.house)
-    ? "Manglik ⚠"
-    : "No Manglik ✅";
-}
-
-/* ❤️ DEEP COMPATIBILITY */
-function deepCompatibility(k1, k2) {
-  let score = 0;
-
-  if (k1.Moon.rashi === k2.Moon.rashi) score += 7;
-  if (k1.Moon.nakshatra === k2.Moon.nakshatra) score += 8;
-  if (k1.Venus.navamsa === k2.Mars.navamsa) score += 6;
-  if (k1.Venus.rashi === k2.Mars.rashi) score += 5;
-
-  return {
-    score,
-    verdict:
-      score >= 20 ? "Excellent Match 💖" :
-      score >= 15 ? "Good Match 🙂" :
-      "Weak Match ⚠"
-  };
-}
-
-/* ❤️ GUNA MILAN */
-function gunaMilan(k1, k2) {
-  let score = 0;
-  if (k1.Moon.nakshatra === k2.Moon.nakshatra) score += 8;
-  if (k1.Moon.rashi === k2.Moon.rashi) score += 7;
-  if (k1.Lagna.rashi === k2.Lagna.rashi) score += 6;
-
-  return `${score}/36`;
-}
-
-/* 💬 CHAT */
-app.post("/chat", (req, res) => {
-  const { dob, time, place } = req.body;
+/* 💬 CHAT (AI + REAL) */
+app.post("/chat", async (req, res) => {
+  const { message, dob, time, place } = req.body;
 
   const kundli = generateKundli(dob, time, place);
 
-  res.json({
-    kundli,
-    dasha: kundli.Dasha,
-    marriage: marriagePrediction(kundli),
-    manglik: isManglik(kundli)
-  });
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "openai/gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `Real kundli data:\n${JSON.stringify(kundli)}`
+          },
+          {
+            role: "user",
+            content: message
+          }
+        ]
+      })
+    });
+
+    const data = await response.json();
+
+    let reply = data?.choices?.[0]?.message?.content || generateFallback(kundli);
+
+    res.json({
+      reply,
+      kundli,
+      dasha: kundli.Dasha
+    });
+
+  } catch (err) {
+    res.json({
+      reply: generateFallback(kundli),
+      kundli
+    });
+  }
 });
 
 /* ❤️ MATCH */
@@ -226,11 +219,10 @@ app.post("/match", (req, res) => {
   const k2 = generateKundli(p2.dob, p2.time, p2.place);
 
   res.json({
-    deep: deepCompatibility(k1, k2),
-    guna: gunaMilan(k1, k2),
+    guna: `${k1.Moon.rashi === k2.Moon.rashi ? 18 : 10}/36`,
     manglik: {
-      p1: isManglik(k1),
-      p2: isManglik(k2)
+      p1: [1,4,7,8,12].includes(k1.Mars.house),
+      p2: [1,4,7,8,12].includes(k2.Mars.house)
     }
   });
 });
