@@ -6,6 +6,7 @@ const PDFDocument = require("pdfkit");
 const multer = require("multer");
 const fs = require("fs");
 const swe = require("swisseph");
+const { createCanvas } = require("canvas");
 
 swe.swe_set_ephe_path(__dirname + "/ephe");
 console.log("Swiss Ephemeris loaded ✅");
@@ -13,12 +14,6 @@ console.log("Swiss Ephemeris loaded ✅");
 const app = express();
 app.use(cors());
 app.use(express.json());
-
-app.get("/", (req, res) => {
-  res.send("Server is running 🚀");
-});
-
-const upload = multer({ dest: "uploads/" });
 
 /* 🌍 LOCATION */
 const locationMap = {
@@ -56,7 +51,7 @@ function getPlanets(jd) {
   return result;
 }
 
-/* 🌅 LAGNA REAL */
+/* 🌅 LAGNA */
 function getLagnaReal(jd, lat, lon) {
   const houses = swe.swe_houses(jd, lat, lon, 'P');
   return houses.ascendant;
@@ -73,6 +68,13 @@ function getRashi(deg) {
   return rashis[Math.floor(deg / 30)];
 }
 
+/* 🏠 HOUSE */
+function getHouse(planetDeg, lagnaDeg) {
+  let diff = planetDeg - lagnaDeg;
+  if (diff < 0) diff += 360;
+  return Math.floor(diff / 30) + 1;
+}
+
 /* 🔮 KUNDLI */
 function generateKundli(dob, time, place) {
   const { lat, lon } = locationMap[place] || locationMap["Agra"];
@@ -86,7 +88,8 @@ function generateKundli(dob, time, place) {
   for (let p in planets) {
     kundli[p] = {
       degree: planets[p],
-      rashi: getRashi(planets[p])
+      rashi: getRashi(planets[p]),
+      house: getHouse(planets[p], lagnaDeg)
     };
   }
 
@@ -98,25 +101,68 @@ function generateKundli(dob, time, place) {
   return kundli;
 }
 
-/* 🔮 CATEGORY */
-function detectCategory(message) {
-  message = message.toLowerCase();
+/* 💍 MARRIAGE */
+function marriagePrediction(kundli) {
+  const venus = kundli.Venus;
+  const moon = kundli.Moon;
 
-  if (message.includes("love") || message.includes("pyar")) return "LOVE";
-  if (message.includes("career") || message.includes("job")) return "CAREER";
-  if (message.includes("money") || message.includes("paise")) return "MONEY";
+  if (venus.house === 7 || moon.house === 7)
+    return "Shaadi strong yog hai 💍";
 
-  return "GENERAL";
+  if (venus.house === 6 || venus.house === 8)
+    return "Shaadi me delay ya challenges ⚠";
+
+  return "Normal marriage yog 👍";
+}
+
+/* ❤️ COMPATIBILITY */
+function compatibility(k1, k2) {
+  let score = 0;
+
+  if (k1.Moon.rashi === k2.Moon.rashi) score += 8;
+  if (k1.Lagna.rashi === k2.Lagna.rashi) score += 7;
+  if (k1.Venus.rashi === k2.Mars.rashi) score += 5;
+
+  if (score >= 15) return "💖 Strong match";
+  if (score >= 10) return "🙂 Average match";
+  return "⚠ Weak match";
+}
+
+/* 🔮 DASHA */
+function getDasha(moonDeg) {
+  const dashaOrder = ["Ketu","Venus","Sun","Moon","Mars","Rahu","Jupiter","Saturn","Mercury"];
+  const index = Math.floor(moonDeg / 40) % 9;
+  return dashaOrder[index];
+}
+
+/* 🖼️ DRAW KUNDLI */
+function drawKundli(kundli) {
+  const canvas = createCanvas(600, 600);
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = "white";
+  ctx.fillRect(0, 0, 600, 600);
+
+  ctx.strokeRect(50, 50, 500, 500);
+
+  ctx.fillStyle = "black";
+  ctx.font = "14px Arial";
+
+  let y = 80;
+  for (let p in kundli) {
+    ctx.fillText(`${p}: ${kundli[p].rashi}`, 70, y);
+    y += 20;
+  }
+
+  return canvas.toBuffer();
 }
 
 /* 💬 CHAT */
 app.post("/chat", async (req, res) => {
   const { message, name, dob, time, place } = req.body;
 
-  console.log("🔥 CHAT HIT");
-
   const kundli = generateKundli(dob, time, place);
-  const category = detectCategory(message);
+  const dasha = getDasha(kundli.Moon.degree);
 
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -127,110 +173,68 @@ app.post("/chat", async (req, res) => {
       },
       body: JSON.stringify({
         model: "openai/gpt-3.5-turbo",
-        temperature: 0.8,
         messages: [
           {
             role: "system",
             content: `
-Tum ek experienced jyotish ho.
+Tum ek jyotish ho.
 
-REAL DATA:
+DATA:
 ${JSON.stringify(kundli)}
 
-RULES:
-- Hinglish
-- Short
-- Confident
-- Direct prediction
+DASHA: ${dasha}
 
-CATEGORY: ${category}
-
-LOVE → relationship
-CAREER → job
-MONEY → finance
-GENERAL → overall life
+Short aur direct answer do.
 `
           },
-          {
-            role: "user",
-            content: message
-          }
+          { role: "user", content: message }
         ]
       })
     });
 
     const data = await response.json();
 
-    if (!response.ok) {
-      return res.json({
-        reply: generateFallback(kundli, category)
-      });
-    }
-
-    let reply = data?.choices?.[0]?.message?.content;
-
-    if (!reply) {
-      reply = generateFallback(kundli, category);
-    }
-
-    res.json({ reply, kundli });
-
-  } catch (err) {
-    console.log(err);
+    let reply = data?.choices?.[0]?.message?.content || "Answer nahi mila";
 
     res.json({
-      reply: generateFallback(kundli, category)
+      reply,
+      kundli,
+      dasha,
+      marriage: marriagePrediction(kundli)
+    });
+
+  } catch (err) {
+    res.json({
+      reply: "Server error",
+      marriage: marriagePrediction(kundli)
     });
   }
 });
 
-/* 🧠 FALLBACK (REAL RULES) */
-function generateFallback(kundli, category) {
-  const lagna = kundli.Lagna.rashi;
-  const moon = kundli.Moon.rashi;
+/* ❤️ MATCH */
+app.post("/match", (req, res) => {
+  const { p1, p2 } = req.body;
 
-  if (category === "LOVE") {
-    return `Dekhiye, aapka Moon ${moon} mein hai, emotions strong hain. Relationship mein thoda patience rakhein, 2-3 weeks mein situation improve hogi.`;
-  }
+  const k1 = generateKundli(p1.dob, p1.time, p1.place);
+  const k2 = generateKundli(p2.dob, p2.time, p2.place);
 
-  if (category === "CAREER") {
-    return `Aapka Lagna ${lagna} strong hai. Career growth next 3 months mein dikhegi.`;
-  }
-
-  if (category === "MONEY") {
-    return `Financial flow stable rahega, par unnecessary kharch avoid karein.`;
-  }
-
-  return `Overall kundli stable hai. Growth gradual hogi.`;
-}
-
-/* 📄 PDF */
-app.post("/kundli", (req, res) => {
-  const { name, dob, place } = req.body;
-
-  const doc = new PDFDocument();
-  const filePath = `kundli_${Date.now()}.pdf`;
-
-  doc.pipe(fs.createWriteStream(filePath));
-
-  doc.fontSize(22).text("🔮 Real Kundli Report", { align: "center" });
-
-  doc.text(`Name: ${name}`);
-  doc.text(`DOB: ${dob}`);
-  doc.text(`Place: ${place}`);
-
-  doc.text("\nDetailed astrology analysis generated.");
-
-  doc.end();
-
-  setTimeout(() => res.download(filePath), 1000);
+  res.json({
+    result: compatibility(k1, k2)
+  });
 });
 
-/* 📤 UPLOAD */
-app.post("/upload", upload.single("file"), (req, res) => {
-  res.json({ message: "Uploaded ✅" });
+/* 🖼️ IMAGE API */
+app.post("/kundli-image", (req, res) => {
+  const { dob, time, place } = req.body;
+
+  const kundli = generateKundli(dob, time, place);
+  const img = drawKundli(kundli);
+
+  res.setHeader("Content-Type", "image/png");
+  res.send(img);
 });
 
+/* 🚀 START */
 app.listen(3000, "0.0.0.0", () => {
   console.log("Server running 🚀");
 });
