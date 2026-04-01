@@ -135,27 +135,6 @@ function getDasha(moonDeg) {
   return dashaOrder[index];
 }
 
-/* 🖼️ DRAW KUNDLI */
-function drawKundli(kundli) {
-  const canvas = createCanvas(600, 600);
-  const ctx = canvas.getContext("2d");
-
-  ctx.fillStyle = "white";
-  ctx.fillRect(0, 0, 600, 600);
-
-  ctx.strokeRect(50, 50, 500, 500);
-
-  ctx.fillStyle = "black";
-  ctx.font = "14px Arial";
-
-  let y = 80;
-  for (let p in kundli) {
-    ctx.fillText(`${p}: ${kundli[p].rashi}`, 70, y);
-    y += 20;
-  }
-
-  return canvas.toBuffer();
-}
 
 /* 💬 CHAT */
 app.post("/chat", async (req, res) => {
