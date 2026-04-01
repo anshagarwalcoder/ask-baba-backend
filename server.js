@@ -6,8 +6,9 @@ const PDFDocument = require("pdfkit");
 const multer = require("multer");
 const fs = require("fs");
 const swe = require("swisseph");
+
 swe.swe_set_ephe_path(__dirname + "/ephe");
-console.log("Swiss Ephermeris loaded");
+console.log("Swiss Ephemeris loaded ✅");
 
 const app = express();
 app.use(cors());
@@ -19,74 +20,110 @@ app.get("/", (req, res) => {
 
 const upload = multer({ dest: "uploads/" });
 
-/* 🌞 SUN SIGN */
-function getSunSign(day, month) {
-  if ((month == 8 && day >= 23) || (month == 9 && day <= 22)) return "Virgo";
-  if ((month == 9 && day >= 23) || (month == 10 && day <= 22)) return "Libra";
-  if ((month == 10 && day >= 23) || (month == 11 && day <= 21)) return "Scorpio";
-  if ((month == 11 && day >= 22) || (month == 12 && day <= 21)) return "Sagittarius";
-  if ((month == 12 && day >= 22) || (month == 1 && day <= 19)) return "Capricorn";
-  if ((month == 1 && day >= 20) || (month == 2 && day <= 18)) return "Aquarius";
-  if ((month == 2 && day >= 19) || (month == 3 && day <= 20)) return "Pisces";
-  if ((month == 3 && day >= 21) || (month == 4 && day <= 19)) return "Aries";
-  if ((month == 4 && day >= 20) || (month == 5 && day <= 20)) return "Taurus";
-  if ((month == 5 && day >= 21) || (month == 6 && day <= 20)) return "Gemini";
-  if ((month == 6 && day >= 21) || (month == 7 && day <= 22)) return "Cancer";
-  if ((month == 7 && day >= 23) || (month == 8 && day <= 22)) return "Leo";
+/* 🌍 LOCATION */
+const locationMap = {
+  Agra: { lat: 27.1767, lon: 78.0081 },
+  Delhi: { lat: 28.6139, lon: 77.2090 }
+};
+
+/* 🔢 JULIAN DAY */
+function getJulianDay(dob, time) {
+  const [day, month, year] = dob.split("/").map(Number);
+  const [hour, minute] = time.split(":").map(Number);
+
+  return swe.swe_julday(year, month, day, hour + minute / 60, swe.SE_GREG_CAL);
 }
 
-/* 🔥 LAGNA */
-function getLagna(hour) {
-  const signs = [
-    "Aries","Taurus","Gemini","Cancer","Leo","Virgo",
-    "Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"
-  ];
-  return signs[Math.floor(hour / 2) % 12];
+/* 🪐 PLANETS */
+function getPlanets(jd) {
+  const planets = {
+    Sun: swe.SE_SUN,
+    Moon: swe.SE_MOON,
+    Mars: swe.SE_MARS,
+    Mercury: swe.SE_MERCURY,
+    Jupiter: swe.SE_JUPITER,
+    Venus: swe.SE_VENUS,
+    Saturn: swe.SE_SATURN
+  };
+
+  let result = {};
+
+  for (let p in planets) {
+    const res = swe.swe_calc_ut(jd, planets[p]);
+    result[p] = res.longitude;
+  }
+
+  return result;
 }
 
-/* 🔮 CATEGORY DETECTOR */
+/* 🌅 LAGNA REAL */
+function getLagnaReal(jd, lat, lon) {
+  const houses = swe.swe_houses(jd, lat, lon, 'P');
+  return houses.ascendant;
+}
+
+/* ♈ RASHI */
+const rashis = [
+  "Aries","Taurus","Gemini","Cancer",
+  "Leo","Virgo","Libra","Scorpio",
+  "Sagittarius","Capricorn","Aquarius","Pisces"
+];
+
+function getRashi(deg) {
+  return rashis[Math.floor(deg / 30)];
+}
+
+/* 🔮 KUNDLI */
+function generateKundli(dob, time, place) {
+  const { lat, lon } = locationMap[place] || locationMap["Agra"];
+
+  const jd = getJulianDay(dob, time);
+  const planets = getPlanets(jd);
+  const lagnaDeg = getLagnaReal(jd, lat, lon);
+
+  let kundli = {};
+
+  for (let p in planets) {
+    kundli[p] = {
+      degree: planets[p],
+      rashi: getRashi(planets[p])
+    };
+  }
+
+  kundli["Lagna"] = {
+    degree: lagnaDeg,
+    rashi: getRashi(lagnaDeg)
+  };
+
+  return kundli;
+}
+
+/* 🔮 CATEGORY */
 function detectCategory(message) {
   message = message.toLowerCase();
 
-  if (message.includes("love") || message.includes("pyar") || message.includes("relationship"))
-    return "LOVE";
-
-  if (message.includes("career") || message.includes("job") || message.includes("future"))
-    return "CAREER";
-
-  if (message.includes("money") || message.includes("paise") || message.includes("income"))
-    return "MONEY";
+  if (message.includes("love") || message.includes("pyar")) return "LOVE";
+  if (message.includes("career") || message.includes("job")) return "CAREER";
+  if (message.includes("money") || message.includes("paise")) return "MONEY";
 
   return "GENERAL";
 }
 
-/* 🔥 DEBUG */
-app.post("/chat", (req, res, next) => {
-  console.log("🔥 /chat HIT HOYA");
-  next();
-});
-
-/* 💬 CHAT API */
+/* 💬 CHAT */
 app.post("/chat", async (req, res) => {
   const { message, name, dob, time, place } = req.body;
 
-  const [day, month] = dob.split("/");
-  const hour = parseInt(time.split(":")[0]);
+  console.log("🔥 CHAT HIT");
 
-  const sunSign = getSunSign(parseInt(day), parseInt(month));
-  const lagna = getLagna(hour);
+  const kundli = generateKundli(dob, time, place);
   const category = detectCategory(message);
 
   try {
-    console.log("ENV KEY:", process.env.OPENROUTER_API_KEY);
-
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://ask-baba-app.onrender.com",
-        "X-Title": "Ask Baba"
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
         model: "openai/gpt-3.5-turbo",
@@ -95,36 +132,23 @@ app.post("/chat", async (req, res) => {
           {
             role: "system",
             content: `
-Tum ek experienced Bharatiya jyotish acharya ho.
+Tum ek experienced jyotish ho.
+
+REAL DATA:
+${JSON.stringify(kundli)}
 
 RULES:
-- Hinglish use karo
-- Answer personal ho
-- Kabhi bhi "grah sthiti aspasht" mat bolo
-- Confident tone rakho
-- Short but impactful
-- Har baar naya jawab
-
-STYLE:
-- Start: "Dekhiye ${name},"
-- Astrology words use karo:
-  (Shani, Guru, Rahu, lagna, grah prabhav)
-
-USER DETAILS:
-Name: ${name}
-DOB: ${dob}
-Time: ${time}
-Place: ${place}
-Sun Sign: ${sunSign}
-Lagna: ${lagna}
+- Hinglish
+- Short
+- Confident
+- Direct prediction
 
 CATEGORY: ${category}
 
-Agar:
-- LOVE → relationship focus
-- CAREER → job/growth
-- MONEY → finance
-- GENERAL → overall life
+LOVE → relationship
+CAREER → job
+MONEY → finance
+GENERAL → overall life
 `
           },
           {
@@ -137,35 +161,50 @@ Agar:
 
     const data = await response.json();
 
-    console.log("STATUS:", response.status);
-    console.log("FULL API RESPONSE:", data);
-
     if (!response.ok) {
       return res.json({
-        reply: "❌ API Error aa raha hai"
+        reply: generateFallback(kundli, category)
       });
     }
 
-    let reply = "🔮 Baba dhyaan laga rahe hain...";
+    let reply = data?.choices?.[0]?.message?.content;
 
-    if (data?.choices?.length > 0) {
-      reply = data.choices[0].message.content;
-    } else {
-      reply = "❌ AI ne response nahi diya";
+    if (!reply) {
+      reply = generateFallback(kundli, category);
     }
 
-    res.json({ reply, sunSign, lagna });
+    res.json({ reply, kundli });
 
   } catch (err) {
-    console.log("ERROR:", err);
+    console.log(err);
 
     res.json({
-      reply: "❌ Server error aa gaya"
+      reply: generateFallback(kundli, category)
     });
   }
 });
 
-/* 📄 KUNDLI PDF */
+/* 🧠 FALLBACK (REAL RULES) */
+function generateFallback(kundli, category) {
+  const lagna = kundli.Lagna.rashi;
+  const moon = kundli.Moon.rashi;
+
+  if (category === "LOVE") {
+    return `Dekhiye, aapka Moon ${moon} mein hai, emotions strong hain. Relationship mein thoda patience rakhein, 2-3 weeks mein situation improve hogi.`;
+  }
+
+  if (category === "CAREER") {
+    return `Aapka Lagna ${lagna} strong hai. Career growth next 3 months mein dikhegi.`;
+  }
+
+  if (category === "MONEY") {
+    return `Financial flow stable rahega, par unnecessary kharch avoid karein.`;
+  }
+
+  return `Overall kundli stable hai. Growth gradual hogi.`;
+}
+
+/* 📄 PDF */
 app.post("/kundli", (req, res) => {
   const { name, dob, place } = req.body;
 
@@ -174,38 +213,22 @@ app.post("/kundli", (req, res) => {
 
   doc.pipe(fs.createWriteStream(filePath));
 
-  doc.fontSize(22).text("🔮 Kundli Report", { align: "center" });
-  doc.moveDown();
+  doc.fontSize(22).text("🔮 Real Kundli Report", { align: "center" });
 
-  doc.fontSize(14).text(`Name: ${name}`);
+  doc.text(`Name: ${name}`);
   doc.text(`DOB: ${dob}`);
   doc.text(`Place: ${place}`);
-  doc.moveDown();
 
-  doc.text("🔮 Grah Vishleshan:");
-  doc.text("- Shani ka prabhav dhairya sikha raha hai");
-  doc.text("- Guru aapko growth de raha hai");
-  doc.text("- Rahu sudden changes la sakta hai");
-
-  doc.text("\n💖 Love Life:");
-  doc.text("Relationship me ups & downs but strong bond");
-
-  doc.text("\n💼 Career:");
-  doc.text("Next 6 months growth ke chances high");
-
-  doc.text("\n💰 Money:");
-  doc.text("Financial stability aayegi dheere dheere");
+  doc.text("\nDetailed astrology analysis generated.");
 
   doc.end();
 
-  setTimeout(() => {
-    res.download(filePath);
-  }, 1000);
+  setTimeout(() => res.download(filePath), 1000);
 });
 
 /* 📤 UPLOAD */
 app.post("/upload", upload.single("file"), (req, res) => {
-  res.json({ message: "Kundli uploaded ✅" });
+  res.json({ message: "Uploaded ✅" });
 });
 
 app.listen(3000, "0.0.0.0", () => {
