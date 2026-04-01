@@ -6,7 +6,8 @@ const PDFDocument = require("pdfkit");
 const multer = require("multer");
 const fs = require("fs");
 const swe = require("swisseph");
-const { createCanvas } = require("canvas");
+
+
 
 swe.swe_set_ephe_path(__dirname + "/ephe");
 console.log("Swiss Ephemeris loaded ✅");
