@@ -7,9 +7,9 @@ const multer = require("multer");
 const fs = require("fs");
 const swe = require("swisseph");
 
-
-
 swe.swe_set_ephe_path(__dirname + "/ephe");
+swe.swe_set_sid_mode(swe.SE_SIDM_LAHIRI);
+
 console.log("Swiss Ephemeris loaded ✅");
 
 const app = express();
@@ -19,7 +19,6 @@ app.use(express.json());
 app.get("/", (req, res) => {
   res.send("🚀 Ask Baba Backend Running");
 });
-
 
 /* 🌍 LOCATION */
 const locationMap = {
@@ -31,11 +30,10 @@ const locationMap = {
 function getJulianDay(dob, time) {
   const [day, month, year] = dob.split("/").map(Number);
   const [hour, minute] = time.split(":").map(Number);
-
   return swe.swe_julday(year, month, day, hour + minute / 60, swe.SE_GREG_CAL);
 }
 
-/* 🪐 PLANETS */
+/* 🪐 PLANETS (SIDEREAL) */
 function getPlanets(jd) {
   const planets = {
     Sun: swe.SE_SUN,
@@ -47,11 +45,14 @@ function getPlanets(jd) {
     Saturn: swe.SE_SATURN
   };
 
+  const ayan = swe.swe_get_ayanamsa(jd);
   let result = {};
 
   for (let p in planets) {
     const res = swe.swe_calc_ut(jd, planets[p]);
-    result[p] = res.longitude;
+    let sidereal = res.longitude - ayan;
+    if (sidereal < 0) sidereal += 360;
+    result[p] = sidereal;
   }
 
   return result;
@@ -74,11 +75,41 @@ function getRashi(deg) {
   return rashis[Math.floor(deg / 30)];
 }
 
+/* 🌙 NAKSHATRA */
+const nakshatras = [
+"Ashwini","Bharani","Krittika","Rohini","Mrigashira",
+"Ardra","Punarvasu","Pushya","Ashlesha","Magha",
+"Purva Phalguni","Uttara Phalguni","Hasta","Chitra",
+"Swati","Vishakha","Anuradha","Jyeshtha","Mula",
+"Purva Ashadha","Uttara Ashadha","Shravana","Dhanishta",
+"Shatabhisha","Purva Bhadrapada","Uttara Bhadrapada","Revati"
+];
+
+function getNakshatra(deg) {
+  return nakshatras[Math.floor(deg / (360 / 27))];
+}
+
 /* 🏠 HOUSE */
 function getHouse(planetDeg, lagnaDeg) {
   let diff = planetDeg - lagnaDeg;
   if (diff < 0) diff += 360;
   return Math.floor(diff / 30) + 1;
+}
+
+/* 🔮 DASHA */
+const dashaOrder = ["Ketu","Venus","Sun","Moon","Mars","Rahu","Jupiter","Saturn","Mercury"];
+const dashaYears = {
+  Ketu: 7, Venus: 20, Sun: 6, Moon: 10,
+  Mars: 7, Rahu: 18, Jupiter: 16, Saturn: 19, Mercury: 17
+};
+
+function getMahadasha(moonDeg) {
+  const index = Math.floor(moonDeg / (360 / 27)) % 9;
+  const dasha = dashaOrder[index];
+  return {
+    current: dasha,
+    duration: dashaYears[dasha] + " years"
+  };
 }
 
 /* 🔮 KUNDLI */
@@ -95,14 +126,17 @@ function generateKundli(dob, time, place) {
     kundli[p] = {
       degree: planets[p],
       rashi: getRashi(planets[p]),
-      house: getHouse(planets[p], lagnaDeg)
+      house: getHouse(planets[p], lagnaDeg),
+      nakshatra: getNakshatra(planets[p])
     };
   }
 
-  kundli["Lagna"] = {
+  kundli.Lagna = {
     degree: lagnaDeg,
     rashi: getRashi(lagnaDeg)
   };
+
+  kundli.Dasha = getMahadasha(kundli.Moon.degree);
 
   return kundli;
 }
@@ -110,90 +144,50 @@ function generateKundli(dob, time, place) {
 /* 💍 MARRIAGE */
 function marriagePrediction(kundli) {
   const venus = kundli.Venus;
-  const moon = kundli.Moon;
-
-  if (venus.house === 7 || moon.house === 7)
-    return "Shaadi strong yog hai 💍";
-
-  if (venus.house === 6 || venus.house === 8)
-    return "Shaadi me delay ya challenges ⚠";
-
-  return "Normal marriage yog 👍";
+  if (venus.house === 7) return "Strong marriage yog 💍";
+  if ([6,8].includes(venus.house)) return "Marriage delay possible ⚠";
+  return "Normal marriage 👍";
 }
 
-/* ❤️ COMPATIBILITY */
-function compatibility(k1, k2) {
+/* 💍 TIMING */
+function marriageTiming(kundli) {
+  const dasha = kundli.Dasha.current;
+  if (["Venus","Moon"].includes(dasha)) return "Marriage period active 💍";
+  return "Marriage later";
+}
+
+/* ⚠ MANGAL DOSH */
+function isManglik(kundli) {
+  return [1,4,7,8,12].includes(kundli.Mars.house)
+    ? "Manglik ⚠"
+    : "No Manglik ✅";
+}
+
+/* ❤️ GUNA MILAN */
+function gunaMilan(k1, k2) {
   let score = 0;
+  if (k1.Moon.nakshatra === k2.Moon.nakshatra) score += 8;
+  if (k1.Moon.rashi === k2.Moon.rashi) score += 7;
+  if (k1.Lagna.rashi === k2.Lagna.rashi) score += 6;
 
-  if (k1.Moon.rashi === k2.Moon.rashi) score += 8;
-  if (k1.Lagna.rashi === k2.Lagna.rashi) score += 7;
-  if (k1.Venus.rashi === k2.Mars.rashi) score += 5;
-
-  if (score >= 15) return "💖 Strong match";
-  if (score >= 10) return "🙂 Average match";
-  return "⚠ Weak match";
+  return score >= 18
+    ? `Good Match 💖 (${score}/36)`
+    : `Low Match ⚠ (${score}/36)`;
 }
-
-/* 🔮 DASHA */
-function getDasha(moonDeg) {
-  const dashaOrder = ["Ketu","Venus","Sun","Moon","Mars","Rahu","Jupiter","Saturn","Mercury"];
-  const index = Math.floor(moonDeg / 40) % 9;
-  return dashaOrder[index];
-}
-
 
 /* 💬 CHAT */
 app.post("/chat", async (req, res) => {
   const { message, name, dob, time, place } = req.body;
 
   const kundli = generateKundli(dob, time, place);
-  const dasha = getDasha(kundli.Moon.degree);
 
-  try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: "openai/gpt-3.5-turbo",
-        messages: [
-          {
-            role: "system",
-            content: `
-Tum ek jyotish ho.
-
-DATA:
-${JSON.stringify(kundli)}
-
-DASHA: ${dasha}
-
-Short aur direct answer do.
-`
-          },
-          { role: "user", content: message }
-        ]
-      })
-    });
-
-    const data = await response.json();
-
-    let reply = data?.choices?.[0]?.message?.content || "Answer nahi mila";
-
-    res.json({
-      reply,
-      kundli,
-      dasha,
-      marriage: marriagePrediction(kundli)
-    });
-
-  } catch (err) {
-    res.json({
-      reply: "Server error",
-      marriage: marriagePrediction(kundli)
-    });
-  }
+  res.json({
+    kundli,
+    dasha: kundli.Dasha,
+    marriage: marriagePrediction(kundli),
+    timing: marriageTiming(kundli),
+    manglik: isManglik(kundli)
+  });
 });
 
 /* ❤️ MATCH */
@@ -204,24 +198,16 @@ app.post("/match", (req, res) => {
   const k2 = generateKundli(p2.dob, p2.time, p2.place);
 
   res.json({
-    result: compatibility(k1, k2)
+    guna: gunaMilan(k1, k2),
+    manglik: {
+      p1: isManglik(k1),
+      p2: isManglik(k2)
+    }
   });
-});
-
-/* 🖼️ IMAGE API */
-app.post("/kundli-image", (req, res) => {
-  const { dob, time, place } = req.body;
-
-  const kundli = generateKundli(dob, time, place);
-  const img = drawKundli(kundli);
-
-  res.setHeader("Content-Type", "image/png");
-  res.send(img);
 });
 
 /* 🚀 START */
 const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, "0.0.0.0", () => {
   console.log("Server running 🚀 on port", PORT);
 });
