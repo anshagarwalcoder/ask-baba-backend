@@ -16,6 +16,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+app.get("/", (req, res) => {
+  res.send("🚀 Ask Baba Backend Running");
+});
+
+
 /* 🌍 LOCATION */
 const locationMap = {
   Agra: { lat: 27.1767, lon: 78.0081 },
