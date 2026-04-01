@@ -5,6 +5,9 @@ const fetch = (...args) =>
 const PDFDocument = require("pdfkit");
 const multer = require("multer");
 const fs = require("fs");
+const swe = require("swisseph");
+swe.swe_set_ephe_path(__dirname + "/ephe");
+console.log("Swiss Ephermeris loaded");
 
 const app = express();
 app.use(cors());
