@@ -5,8 +5,9 @@ const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 const swe = require("swisseph");
 
-swe.swe_set_ephe_path(__dirname + "/ephe");
+swe.swe_set_ephe_path(process.cwd());
 swe.swe_set_sid_mode(swe.SE_SIDM_LAHIRI);
+swe.swe_calc_ut(jd, planets[p], swe.SEFLG_SWIEPH);
 
 const app = express();
 app.use(cors());
