@@ -45,24 +45,37 @@ function getPlanets(jd) {
   let result = {};
 
   for (let p in planets) {
-    const res = swe.swe_calc_ut(jd, planets[p]);
-    let val = res.longitude - ayan;
+    let xx = new Array(6);
+    let serr = "";
+
+    // ✅ CORRECT CALL
+    swe.swe_calc_ut(jd, planets[p], swe.SEFLG_SWIEPH, xx, serr);
+
+    let val = xx[0] - ayan;
+
     if (val < 0) val += 360;
+
     result[p] = val;
   }
 
   return result;
 }
-
 /* 🌅 LAGNA */
 function getLagnaReal(jd, lat, lon) {
-  const h = swe.swe_houses(jd, lat, lon, "P");
-  if (!h || isNaN(h.ascendant)) {
-  return 0;
-  }
-  return h.ascendant;
-}
+  let cusps = new Array(13);
+  let ascmc = new Array(10);
 
+  swe.swe_houses(jd, lat, lon, "P", cusps, ascmc);
+
+  let asc = ascmc[0];
+
+  if (!asc || isNaN(asc)) {
+    console.log("❌ Lagna error");
+    return 0;
+  }
+
+  return asc;
+}
 /* ♈ RASHI */
 const rashis = ["Aries","Taurus","Gemini","Cancer","Leo","Virgo","Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"];
 const getRashi = d => rashis[Math.floor(d / 30)];
