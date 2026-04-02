@@ -2,9 +2,6 @@ const express = require("express");
 const cors = require("cors");
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
-const PDFDocument = require("pdfkit");
-const multer = require("multer");
-const fs = require("fs");
 const swe = require("swisseph");
 
 swe.swe_set_ephe_path(__dirname + "/ephe");
@@ -17,8 +14,6 @@ app.use(express.json());
 app.get("/", (req, res) => {
   res.send("🚀 Ask Baba Backend Running");
 });
-
-const upload = multer({ dest: "uploads/" });
 
 /* 🌍 LOCATION */
 const locationMap = {
@@ -100,7 +95,21 @@ const dashaOrder = ["Ketu","Venus","Sun","Moon","Mars","Rahu","Jupiter","Saturn"
 
 function getMahadasha(moonDeg){
   const i = Math.floor(moonDeg/(360/27))%9;
-  return { current:dashaOrder[i] };
+  return dashaOrder[i];
+}
+
+/* 🌐 TRANSIT (GOCHAR) */
+function getTransit() {
+  const now = new Date();
+  const jd = swe.swe_julday(
+    now.getFullYear(),
+    now.getMonth()+1,
+    now.getDate(),
+    now.getHours(),
+    swe.SE_GREG_CAL
+  );
+
+  return getPlanets(jd);
 }
 
 /* 🔮 KUNDLI */
@@ -127,8 +136,32 @@ function generateKundli(dob,time,place){
 
   k.Lagna={degree:lagna,rashi:getRashi(lagna)};
   k.Dasha=getMahadasha(k.Moon.degree);
+  k.Transit=getTransit();
 
   return k;
+}
+
+/* 🎯 SMART TIMING */
+function getTiming(k,cat){
+  let baseMonths = {
+    LOVE: 2,
+    CAREER: 3,
+    MONEY: 1,
+    GENERAL: 4
+  };
+
+  let add = baseMonths[cat] || 3;
+
+  if(k.Dasha==="Venus") add -= 1;
+  if(k.Dasha==="Saturn") add += 2;
+
+  let now=new Date();
+  let m=now.getMonth()+1+add;
+  let y=now.getFullYear();
+
+  if(m>12){ m-=12; y+=1; }
+
+  return `${m}/${y}`;
 }
 
 /* 🔥 CATEGORY */
@@ -140,22 +173,9 @@ function detectCategory(msg){
   return "GENERAL";
 }
 
-/* ⏳ TIMING ENGINE */
-function getTiming(k,cat){
-  let now=new Date();
-  let m=now.getMonth()+1;
-  let y=now.getFullYear();
-
-  if(cat==="LOVE") return `${m+2}/${y}`;
-  if(cat==="CAREER") return `${m+3}/${y}`;
-  if(cat==="MONEY") return `${m+1}/${y}`;
-
-  return `${m+4}/${y}`;
-}
-
 /* 🔥 FALLBACK */
 function fallback(k,cat,time){
-  return `Aapki ${k.Dasha.current} dasha chal rahi hai. ${cat} me improvement ${time} ke aas paas dikhega.`;
+  return `Aapki ${k.Dasha} dasha chal rahi hai. ${cat} me strong improvement ${time} ke aas paas dikhega.`;
 }
 
 /* 💬 CHAT */
@@ -175,20 +195,20 @@ app.post("/chat", async (req,res)=>{
       },
       body:JSON.stringify({
         model:"openai/gpt-4o-mini",
-        temperature:0.6,
+        temperature:0.5,
         messages:[
           {
             role:"system",
             content:`
-Tum ek jyotish ho.
+Tum ek expert jyotish ho.
 
 RULES:
-- Exact month year bolo (${timing})
-- Past kabhi mat bolo
+- Exact month/year bolo (${timing})
 - Hinglish
-- Short
+- Short & confident
+- Future only
 
-DATA:
+KUNDLI:
 ${JSON.stringify(k)}
 `
           },
@@ -215,8 +235,13 @@ app.post("/match",(req,res)=>{
   const k1=generateKundli(p1.dob,p1.time,p1.place);
   const k2=generateKundli(p2.dob,p2.time,p2.place);
 
+  let score=0;
+  if(k1.Moon.rashi===k2.Moon.rashi) score+=7;
+  if(k1.Moon.nakshatra===k2.Moon.nakshatra) score+=8;
+
   res.json({
-    guna:`${k1.Moon.rashi===k2.Moon.rashi?18:10}/36`
+    score:`${score}/36`,
+    verdict: score>15 ? "Good Match 💖" : "Average ⚠"
   });
 });
 
