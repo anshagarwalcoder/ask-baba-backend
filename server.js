@@ -153,7 +153,7 @@ function convertToHouses(kundli) {
   }
   return houses;
 }
-function drawRealChart(kundli) {
+function drawKundliChart(kundli) {
   const { createCanvas } = require("canvas");
   const canvas = createCanvas(800, 800);
   const ctx = canvas.getContext("2d");
