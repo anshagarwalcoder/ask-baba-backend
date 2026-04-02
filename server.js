@@ -93,13 +93,12 @@ function getNavamsa(deg) {
 
 /* 🔮 DASHA */
 const dashaOrder = ["Ketu","Venus","Sun","Moon","Mars","Rahu","Jupiter","Saturn","Mercury"];
-
 function getMahadasha(moonDeg){
   const i = Math.floor(moonDeg/(360/27))%9;
   return dashaOrder[i];
 }
 
-/* 🌐 TRANSIT (GOCHAR) */
+/* 🌐 TRANSIT */
 function getTransit() {
   const now = new Date();
   const jd = swe.swe_julday(
@@ -109,7 +108,6 @@ function getTransit() {
     now.getHours(),
     swe.SE_GREG_CAL
   );
-
   return getPlanets(jd);
 }
 
@@ -142,81 +140,94 @@ function generateKundli(dob,time,place){
   return k;
 }
 
+/* 🔥 SYMBOLS */
+const short = {
+  Sun: "Su ☉",
+  Moon: "Mo ☽",
+  Mars: "Ma ♂",
+  Mercury: "Me ☿",
+  Jupiter: "Ju ♃",
+  Venus: "Ve ♀",
+  Saturn: "Sa ♄"
+};
+
+/* 🏠 HOUSES */
 function convertToHouses(kundli) {
   let houses = {};
   for (let i = 1; i <= 12; i++) houses[i] = [];
 
   for (let p in kundli) {
     if (kundli[p].house) {
-      houses[kundli[p].house].push(p.slice(0,2));
+      houses[kundli[p].house].push(short[p] || p);
     }
   }
+
+  houses[1].push("Asc ↑");
+
   return houses;
 }
+
+/* 🎨 DRAW CHART */
 function drawKundliChart(kundli) {
-  const { createCanvas } = require("canvas");
-  const canvas = createCanvas(800, 800);
+  const canvas = createCanvas(900, 900);
   const ctx = canvas.getContext("2d");
 
-  ctx.fillStyle = "white";
-  ctx.fillRect(0, 0, 800, 800);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, 900, 900);
 
-  ctx.strokeStyle = "black";
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 3;
 
-  // diamond
   ctx.beginPath();
-  ctx.moveTo(400, 50);
-  ctx.lineTo(750, 400);
-  ctx.lineTo(400, 750);
-  ctx.lineTo(50, 400);
+  ctx.moveTo(450, 50);
+  ctx.lineTo(850, 450);
+  ctx.lineTo(450, 850);
+  ctx.lineTo(50, 450);
   ctx.closePath();
   ctx.stroke();
 
-  // inner lines
   ctx.beginPath();
-  ctx.moveTo(400, 50); ctx.lineTo(400, 750);
-  ctx.moveTo(50, 400); ctx.lineTo(750, 400);
-  ctx.moveTo(200, 200); ctx.lineTo(600, 600);
-  ctx.moveTo(600, 200); ctx.lineTo(200, 600);
+  ctx.moveTo(450, 50); ctx.lineTo(450, 850);
+  ctx.moveTo(50, 450); ctx.lineTo(850, 450);
+  ctx.moveTo(250, 250); ctx.lineTo(650, 650);
+  ctx.moveTo(650, 250); ctx.lineTo(250, 650);
   ctx.stroke();
-
-  ctx.font = "20px Arial";
 
   const houses = convertToHouses(kundli);
 
   const pos = {
-    1:[400,120],2:[550,200],3:[650,400],4:[550,600],
-    5:[400,700],6:[250,600],7:[150,400],8:[250,200],
-    9:[400,250],10:[500,400],11:[400,550],12:[300,400]
+    1:[450,120],2:[700,250],3:[800,450],4:[700,700],
+    5:[450,820],6:[200,700],7:[100,450],8:[200,250],
+    9:[450,250],10:[600,450],11:[450,600],12:[300,450]
   };
+
+  ctx.font = "22px Arial";
+  ctx.fillStyle = "black";
 
   for (let h in houses) {
     const [x,y] = pos[h];
-    ctx.fillText(houses[h].join(","), x, y);
+    ctx.fillText(houses[h].join(" "), x, y);
   }
 
-  return canvas.toBuffer();
+  ctx.font = "28px Arial";
+  ctx.fillText("Vedic Kundli", 320, 40);
+
+  return canvas.toBuffer("image/png");
 }
-/* 🎯 SMART TIMING */
+
+/* 🎯 TIMING */
 function getTiming(k,cat){
-  let baseMonths = {
-    LOVE: 2,
-    CAREER: 3,
-    MONEY: 1,
-    GENERAL: 4
-  };
+  let base={LOVE:2,CAREER:4,MONEY:1,GENERAL:3};
+  let add=base[cat]||3;
 
-  let add = baseMonths[cat] || 3;
-
-  if(k.Dasha==="Venus") add -= 1;
-  if(k.Dasha==="Saturn") add += 2;
+  if(k.Dasha==="Saturn") add+=2;
+  if(k.Dasha==="Venus") add-=1;
 
   let now=new Date();
   let m=now.getMonth()+1+add;
   let y=now.getFullYear();
 
-  if(m>12){ m-=12; y+=1; }
+  if(m>12){m-=12;y++;}
 
   return `${m}/${y}`;
 }
@@ -235,28 +246,26 @@ function fallback(k,cat,time){
   return `Aapki ${k.Dasha} dasha chal rahi hai. ${cat} me strong improvement ${time} ke aas paas dikhega.`;
 }
 
-app.post("/kundli-chart", (req, res) => {
-  const { dob, time, place } = req.body;
-
-  const kundli = generateKundli(dob, time, place);
-
-  const image = drawKundliChart(kundli);
-
-  res.setHeader("Content-Type", "image/png");
-  res.send(image);
+/* 📊 CHART API */
+app.post("/kundli-chart",(req,res)=>{
+  const {dob,time,place}=req.body;
+  const k=generateKundli(dob,time,place);
+  const img=drawKundliChart(k);
+  res.setHeader("Content-Type","image/png");
+  res.send(img);
 });
 
-app.post("/download-kundli", (req, res) => {
-  const { dob, time, place } = req.body;
+/* 📥 DOWNLOAD */
+app.post("/download-kundli",(req,res)=>{
+  const {dob,time,place}=req.body;
+  const k=generateKundli(dob,time,place);
+  const img=drawKundliChart(k);
 
-  const kundli = generateKundli(dob, time, place);
-  const image = drawKundliChart(kundli);
-
-  res.setHeader("Content-Disposition", "attachment; filename=kundli.png");
-  res.setHeader("Content-Type", "image/png");
-
-  res.send(image);
+  res.setHeader("Content-Disposition","attachment; filename=kundli.png");
+  res.setHeader("Content-Type","image/png");
+  res.send(img);
 });
+
 /* 💬 CHAT */
 app.post("/chat", async (req,res)=>{
   const {message,dob,time,place}=req.body;
@@ -278,18 +287,10 @@ app.post("/chat", async (req,res)=>{
         messages:[
           {
             role:"system",
-            content:`
-Tum ek expert jyotish ho.
-
-RULES:
-- Exact month/year bolo (${timing})
-- Hinglish
-- Short & confident
-- Future only
-
-KUNDLI:
-${JSON.stringify(k)}
-`
+            content:`Tum ek expert jyotish ho.
+Exact month/year bolo (${timing})
+Future only
+${JSON.stringify(k)}`
           },
           {role:"user",content:message}
         ]
@@ -297,7 +298,6 @@ ${JSON.stringify(k)}
     });
 
     const data=await r.json();
-
     let reply=data?.choices?.[0]?.message?.content || fallback(k,cat,timing);
 
     res.json({reply,kundli:k,timing});
