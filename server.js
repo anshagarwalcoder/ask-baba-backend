@@ -56,7 +56,11 @@ function getPlanets(jd) {
 
 /* 🌅 LAGNA */
 function getLagnaReal(jd, lat, lon) {
-  return swe.swe_houses(jd, lat, lon, "P").ascendant;
+  const h = swe.swe_houses(jd, lat, lon, "P");
+  if (!h || isNaN(h.ascendant)) {
+  return 0;
+  }
+  return h.ascendant;
 }
 
 /* ♈ RASHI */
@@ -156,9 +160,20 @@ function convertToHouses(kundli) {
   for (let i = 1; i <= 12; i++) houses[i] = [];
 
   for (let p in kundli) {
-    if (kundli[p].house) {
-      houses[kundli[p].house].push(p);
+    if (kundli[p] && kundli[p].house && !isNaN(kundli[p].house)) {
+      let h = Math.floor(kundli[p].house);
+      if (h >= 1 && h <= 12) {
+        houses[h].push(p);
+      }
     }
+  }
+
+  // fallback (agar sab empty ho gaya)
+  let total = Object.values(houses).flat().length;
+
+  if (total === 0) {
+    console.log("⚠️ fallback triggered");
+    houses[1] = ["Sun","Moon","Mars","Mercury"];
   }
 
   houses[1].push("Asc");
