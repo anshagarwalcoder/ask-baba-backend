@@ -151,23 +151,21 @@ const short = {
   Saturn: "Sa ♄"
 };
 
-/* 🏠 HOUSES */
 function convertToHouses(kundli) {
   let houses = {};
   for (let i = 1; i <= 12; i++) houses[i] = [];
 
   for (let p in kundli) {
     if (kundli[p].house) {
-      houses[kundli[p].house].push(short[p] || p);
+      houses[kundli[p].house].push(p);
     }
   }
 
-  houses[1].push("Asc ↑");
+  houses[1].push("Asc");
 
   return houses;
 }
 
-/* 🎨 DRAW CHART */
 function drawKundliChart(kundli) {
   const canvas = createCanvas(900, 900);
   const ctx = canvas.getContext("2d");
@@ -178,6 +176,7 @@ function drawKundliChart(kundli) {
   ctx.strokeStyle = "#000";
   ctx.lineWidth = 3;
 
+  // Outer diamond
   ctx.beginPath();
   ctx.moveTo(450, 50);
   ctx.lineTo(850, 450);
@@ -186,35 +185,56 @@ function drawKundliChart(kundli) {
   ctx.closePath();
   ctx.stroke();
 
+  // Cross lines
   ctx.beginPath();
   ctx.moveTo(450, 50); ctx.lineTo(450, 850);
   ctx.moveTo(50, 450); ctx.lineTo(850, 450);
+  ctx.stroke();
+
+  // Diagonals
+  ctx.beginPath();
   ctx.moveTo(250, 250); ctx.lineTo(650, 650);
   ctx.moveTo(650, 250); ctx.lineTo(250, 650);
   ctx.stroke();
 
+  ctx.font = "18px Arial";
+  ctx.fillStyle = "black";
+  ctx.textAlign = "center";
+
   const houses = convertToHouses(kundli);
 
+  // PERFECT POSITIONS (centered)
   const pos = {
-    1:[450,120],2:[700,250],3:[800,450],4:[700,700],
-    5:[450,820],6:[200,700],7:[100,450],8:[200,250],
-    9:[450,250],10:[600,450],11:[450,600],12:[300,450]
+    1:[450,180],
+    2:[650,300],
+    3:[750,450],
+    4:[650,650],
+    5:[450,780],
+    6:[250,650],
+    7:[150,450],
+    8:[250,300],
+    9:[450,300],
+    10:[600,450],
+    11:[450,600],
+    12:[300,450]
   };
-
-  ctx.font = "22px Arial";
-  ctx.fillStyle = "black";
 
   for (let h in houses) {
     const [x,y] = pos[h];
-    ctx.fillText(houses[h].join(" "), x, y);
+    const text = houses[h].join("\n");
+
+    const lines = text.split("\n");
+    lines.forEach((line, i) => {
+      ctx.fillText(line, x, y + (i * 18));
+    });
   }
 
-  ctx.font = "28px Arial";
-  ctx.fillText("Vedic Kundli", 320, 40);
+  // Title
+  ctx.font = "26px Arial";
+  ctx.fillText("Vedic Kundli", 450, 40);
 
   return canvas.toBuffer("image/png");
 }
-
 /* 🎯 TIMING */
 function getTiming(k,cat){
   let base={LOVE:2,CAREER:4,MONEY:1,GENERAL:3};
