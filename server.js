@@ -142,18 +142,29 @@ function generateKundli(dob,time,place){
   return k;
 }
 
-function drawKundliChart(kundli) {
+function convertToHouses(kundli) {
+  let houses = {};
+  for (let i = 1; i <= 12; i++) houses[i] = [];
+
+  for (let p in kundli) {
+    if (kundli[p].house) {
+      houses[kundli[p].house].push(p.slice(0,2));
+    }
+  }
+  return houses;
+}
+function drawRealChart(kundli) {
+  const { createCanvas } = require("canvas");
   const canvas = createCanvas(800, 800);
   const ctx = canvas.getContext("2d");
 
-  // background
   ctx.fillStyle = "white";
   ctx.fillRect(0, 0, 800, 800);
 
   ctx.strokeStyle = "black";
   ctx.lineWidth = 2;
 
-  // diamond shape
+  // diamond
   ctx.beginPath();
   ctx.moveTo(400, 50);
   ctx.lineTo(750, 400);
@@ -162,30 +173,31 @@ function drawKundliChart(kundli) {
   ctx.closePath();
   ctx.stroke();
 
-  // cross lines
+  // inner lines
   ctx.beginPath();
-  ctx.moveTo(400, 50);
-  ctx.lineTo(400, 750);
-  ctx.moveTo(50, 400);
-  ctx.lineTo(750, 400);
+  ctx.moveTo(400, 50); ctx.lineTo(400, 750);
+  ctx.moveTo(50, 400); ctx.lineTo(750, 400);
+  ctx.moveTo(200, 200); ctx.lineTo(600, 600);
+  ctx.moveTo(600, 200); ctx.lineTo(200, 600);
   ctx.stroke();
 
-  // planets text
-  ctx.font = "18px Arial";
-  ctx.fillStyle = "black";
+  ctx.font = "20px Arial";
 
-  let y = 100;
+  const houses = convertToHouses(kundli);
 
-  for (let p in kundli) {
-    if (kundli[p].rashi) {
-      ctx.fillText(`${p}: ${kundli[p].rashi}`, 100, y);
-      y += 25;
-    }
+  const pos = {
+    1:[400,120],2:[550,200],3:[650,400],4:[550,600],
+    5:[400,700],6:[250,600],7:[150,400],8:[250,200],
+    9:[400,250],10:[500,400],11:[400,550],12:[300,400]
+  };
+
+  for (let h in houses) {
+    const [x,y] = pos[h];
+    ctx.fillText(houses[h].join(","), x, y);
   }
 
   return canvas.toBuffer();
 }
-
 /* 🎯 SMART TIMING */
 function getTiming(k,cat){
   let baseMonths = {
