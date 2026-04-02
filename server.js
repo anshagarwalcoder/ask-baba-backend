@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const { createCanvas } = require("canvas");
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 const swe = require("swisseph");
@@ -141,6 +142,50 @@ function generateKundli(dob,time,place){
   return k;
 }
 
+function drawKundliChart(kundli) {
+  const canvas = createCanvas(800, 800);
+  const ctx = canvas.getContext("2d");
+
+  // background
+  ctx.fillStyle = "white";
+  ctx.fillRect(0, 0, 800, 800);
+
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = 2;
+
+  // diamond shape
+  ctx.beginPath();
+  ctx.moveTo(400, 50);
+  ctx.lineTo(750, 400);
+  ctx.lineTo(400, 750);
+  ctx.lineTo(50, 400);
+  ctx.closePath();
+  ctx.stroke();
+
+  // cross lines
+  ctx.beginPath();
+  ctx.moveTo(400, 50);
+  ctx.lineTo(400, 750);
+  ctx.moveTo(50, 400);
+  ctx.lineTo(750, 400);
+  ctx.stroke();
+
+  // planets text
+  ctx.font = "18px Arial";
+  ctx.fillStyle = "black";
+
+  let y = 100;
+
+  for (let p in kundli) {
+    if (kundli[p].rashi) {
+      ctx.fillText(`${p}: ${kundli[p].rashi}`, 100, y);
+      y += 25;
+    }
+  }
+
+  return canvas.toBuffer();
+}
+
 /* 🎯 SMART TIMING */
 function getTiming(k,cat){
   let baseMonths = {
@@ -178,6 +223,28 @@ function fallback(k,cat,time){
   return `Aapki ${k.Dasha} dasha chal rahi hai. ${cat} me strong improvement ${time} ke aas paas dikhega.`;
 }
 
+app.post("/kundli-chart", (req, res) => {
+  const { dob, time, place } = req.body;
+
+  const kundli = generateKundli(dob, time, place);
+
+  const image = drawKundliChart(kundli);
+
+  res.setHeader("Content-Type", "image/png");
+  res.send(image);
+});
+
+app.post("/download-kundli", (req, res) => {
+  const { dob, time, place } = req.body;
+
+  const kundli = generateKundli(dob, time, place);
+  const image = drawKundliChart(kundli);
+
+  res.setHeader("Content-Disposition", "attachment; filename=kundli.png");
+  res.setHeader("Content-Type", "image/png");
+
+  res.send(image);
+});
 /* 💬 CHAT */
 app.post("/chat", async (req,res)=>{
   const {message,dob,time,place}=req.body;
