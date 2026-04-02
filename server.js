@@ -165,7 +165,6 @@ function convertToHouses(kundli) {
 
   return houses;
 }
-
 function drawKundliChart(kundli) {
   const canvas = createCanvas(900, 900);
   const ctx = canvas.getContext("2d");
@@ -185,47 +184,50 @@ function drawKundliChart(kundli) {
   ctx.closePath();
   ctx.stroke();
 
-  // Cross lines
+  // Cross
   ctx.beginPath();
   ctx.moveTo(450, 50); ctx.lineTo(450, 850);
   ctx.moveTo(50, 450); ctx.lineTo(850, 450);
   ctx.stroke();
 
-  // Diagonals
+  // Diagonal
   ctx.beginPath();
   ctx.moveTo(250, 250); ctx.lineTo(650, 650);
   ctx.moveTo(650, 250); ctx.lineTo(250, 650);
   ctx.stroke();
 
-  ctx.font = "18px Arial";
-  ctx.fillStyle = "black";
-  ctx.textAlign = "center";
-
   const houses = convertToHouses(kundli);
 
-  // PERFECT POSITIONS (centered)
-  const pos = {
-    1:[450,180],
-    2:[650,300],
-    3:[750,450],
-    4:[650,650],
-    5:[450,780],
-    6:[250,650],
-    7:[150,450],
-    8:[250,300],
-    9:[450,300],
-    10:[600,450],
-    11:[450,600],
-    12:[300,450]
+  // Rashi numbers (real pandit style)
+  const rashiNumbers = {
+    1:"1",2:"2",3:"3",4:"4",
+    5:"5",6:"6",7:"7",8:"8",
+    9:"9",10:"10",11:"11",12:"12"
   };
+
+  const pos = {
+    1:[450,160],2:[700,300],3:[780,450],4:[700,700],
+    5:[450,820],6:[200,700],7:[120,450],8:[200,300],
+    9:[450,300],10:[600,450],11:[450,600],12:[300,450]
+  };
+
+  ctx.textAlign = "center";
+
+  // Draw house numbers (important 🔥)
+  ctx.font = "16px Arial";
+  for (let h in pos) {
+    const [x,y] = pos[h];
+    ctx.fillText(rashiNumbers[h], x, y - 25);
+  }
+
+  // Draw planets (clean spacing)
+  ctx.font = "18px Arial";
 
   for (let h in houses) {
     const [x,y] = pos[h];
-    const text = houses[h].join("\n");
 
-    const lines = text.split("\n");
-    lines.forEach((line, i) => {
-      ctx.fillText(line, x, y + (i * 18));
+    houses[h].forEach((p, i) => {
+      ctx.fillText(p, x, y + (i * 18));
     });
   }
 
