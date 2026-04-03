@@ -47,9 +47,21 @@ function getPlanets(jd) {
     let xx = new Array(6);
     let serr = "";
 
+    // 🔥 TRY REAL DATA FIRST
     swe.swe_calc_ut(jd, planets[p], swe.SEFLG_SWIEPH, xx, serr);
 
-    let val = xx[0] - ayan;
+    let val = xx[0];
+
+    // ❌ AGAR FAIL HO GAYA (NaN ya 0)
+    if (!val || isNaN(val)) {
+      console.log("⚠️ SWIEPH failed, switching to MOSEPH");
+
+      // 🔥 AUTO FALLBACK
+      swe.swe_calc_ut(jd, planets[p], swe.SEFLG_MOSEPH, xx, serr);
+      val = xx[0];
+    }
+
+    val = val - ayan;
     if (val < 0) val += 360;
 
     result[p] = val;
@@ -57,7 +69,6 @@ function getPlanets(jd) {
 
   return result;
 }
-
 function convertToHouses(kundli) {
   let houses = {};
   for (let i = 1; i <= 12; i++) houses[i] = [];
@@ -72,6 +83,7 @@ function convertToHouses(kundli) {
 
       if (h >= 1 && h <= 12) {
         houses[h].push(p);
+     if(!kundli[p] || !kundli[p].house)continue;
       }
     }
   }
@@ -88,14 +100,21 @@ function convertToHouses(kundli) {
 
   return houses;
 }
-/* 🌅 LAGNA */
 function getLagnaReal(jd, lat, lon) {
   let cusps = new Array(13);
   let ascmc = new Array(10);
-  swe.swe_houses(jd, lat, lon, "P", cusps, ascmc);
-  return ascmc[0] || 0;
-}
 
+  swe.swe_houses(jd, lat, lon, "P", cusps, ascmc);
+
+  let asc = ascmc[0];
+
+  if (!asc || isNaN(asc)) {
+    console.log("⚠️ Lagna fallback used");
+    return 1; // fallback (Aries)
+  }
+
+  return asc;
+}
 /* ♈ RASHI */
 const rashis = ["Aries","Taurus","Gemini","Cancer","Leo","Virgo","Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"];
 const getRashi = d => rashis[Math.floor(d / 30)];
