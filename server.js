@@ -5,7 +5,9 @@ const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 const swe = require("swisseph");
 
-swe.swe_set_ephe_path(__dirname + "/ephe");
+const path = require("path");
+
+swe.swe_set_ephe_path(path.join(__dirname, "ephe"));
 swe.swe_set_sid_mode(swe.SE_SIDM_LAHIRI);
 
 const app = express();
@@ -48,7 +50,15 @@ function getPlanets(jd) {
     let serr = "";
 
     // 🔥 TRY REAL DATA FIRST
-    swe.swe_calc_ut(jd, planets[p], swe.SEFLG_SWIEPH, xx, serr);
+    let flag = swe.SEFLG_SWIEPH;
+
+swe.swe_calc_ut(jd, planets[p], flag, xx, serr);
+
+// fallback agar fail ho
+if (isNaN(xx[0])) {
+  console.log("⚠️ SWIEPH failed, using MOSEPH for", p);
+  swe.swe_calc_ut(jd, planets[p], swe.SEFLG_MOSEPH, xx, serr);
+}
 
     let val = xx[0];
 
