@@ -146,41 +146,45 @@ function generateKundli(dob,time,place){
   const planets=getPlanets(jd);
   const lagna=getLagnaReal(jd,lat,lon);
 
-  console.log("PLANETS:", planets);
-console.log("LAGNA:", lagna);
-  
   let k={};
 
   for(let p in planets){
+    const nak=getNakshatraDetails(planets[p]);
+
     k[p]={
       degree:planets[p],
       rashi:getRashi(planets[p]),
-      house:getHouse(planets[p],lagna)
+      house:getHouse(planets[p],lagna),
+      nakshatra:nak.nakshatra,
+      pada:nak.pada,
+      navamsa:getNavamsa(planets[p])
     };
   }
 
   k.Lagna={degree:lagna,rashi:getRashi(lagna)};
   k.Dasha=getMahadasha(k.Moon.degree);
+  k.Transit=getTransit();
+
+  // ✅ YAHI DAALNA HAI (END ME)
+  if (!k.Moon || isNaN(k.Moon.degree)) {
+    console.log("⚠️ Invalid kundli fallback used");
+
+    for (let p in k) {
+      if (k[p]?.degree === undefined || isNaN(k[p].degree)) {
+        k[p] = {
+          degree: 0,
+          rashi: "Aries",
+          house: 1,
+          nakshatra: "Ashwini",
+          pada: 1,
+          navamsa: "Aries"
+        };
+      }
+    }
+  }
 
   return k;
 }
-if (!k.Moon || isNaN(k.Moon.degree)) {
-  console.log("⚠️ Invalid kundli fallback used");
-
-  for (let p in k) {
-    if (k[p]?.degree === undefined || isNaN(k[p].degree)) {
-      k[p] = {
-        degree: 0,
-        rashi: "Aries",
-        house: 1,
-        nakshatra: "Ashwini",
-        pada: 1,
-        navamsa: "Aries"
-      };
-    }
-  }
-}
-
 /* 🧿 CHART */
 function drawKundliChart(k){
   const canvas=createCanvas(800,800);
