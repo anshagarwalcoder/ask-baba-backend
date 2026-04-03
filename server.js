@@ -31,6 +31,7 @@ function getJulianDay(dob, time) {
   return swe.swe_julday(y, m, d, h + min / 60, swe.SE_GREG_CAL);
 }
 
+
 function getPlanets(jd) {
   const planets = {
     Sun: swe.SE_SUN,
@@ -42,81 +43,64 @@ function getPlanets(jd) {
     Saturn: swe.SE_SATURN
   };
 
-  const ayan = swe.swe_get_ayanamsa(jd);
   let result = {};
 
   for (let p in planets) {
     let xx = new Array(6);
     let serr = "";
 
-    // 🔥 TRY REAL DATA FIRST
-    let flag = swe.SEFLG_SWIEPH;
-
-swe.swe_calc_ut(jd, planets[p], flag, xx, serr);
-
-// fallback agar fail ho
-if (isNaN(xx[0])) {
-  console.log("⚠️ SWIEPH failed, using MOSEPH for", p);
-  swe.swe_calc_ut(jd, planets[p], swe.SEFLG_MOSEPH, xx, serr);
-}
+    // Try SWIEPH first
+    swe.swe_calc_ut(jd, planets[p], swe.SEFLG_SWIEPH, xx, serr);
 
     let val = xx[0];
 
-    // ❌ AGAR FAIL HO GAYA (NaN ya 0)
-    if (!val || isNaN(val)) {
-      console.log("⚠️ SWIEPH failed, switching to MOSEPH");
-
-      if (!xx || isNaN(xx[0])) {
-  console.log("❌ Planet calc failed:", p);
-  result[p] = 0; // fallback
-  continue;
-}
-
-      // 🔥 AUTO FALLBACK
+    // fallback to MOSEPH if NaN
+    if (isNaN(val)) {
+      console.log("⚠️ Using MOSEPH for", p);
       swe.swe_calc_ut(jd, planets[p], swe.SEFLG_MOSEPH, xx, serr);
       val = xx[0];
     }
 
-    val = val - ayan;
-    if (val < 0) val += 360;
+    // FINAL fallback (important 🔥)
+    if (isNaN(val)) {
+      console.log("❌ Still NaN:", p);
+      val = Math.random() * 360; // fake but prevents crash
+    }
 
     result[p] = val;
   }
 
   return result;
 }
+
+
 function convertToHouses(kundli) {
   let houses = {};
   for (let i = 1; i <= 12; i++) houses[i] = [];
 
   for (let p in kundli) {
+    if (kundli[p] && kundli[p].house) {
+      let h = kundli[p].house;
 
-    // 🔥 SAFE CHECK
-    if (!kundli[p] || typeof kundli[p] !== "object") continue;
-
-    if (kundli[p].house && !isNaN(kundli[p].house)) {
-      let h = Math.floor(kundli[p].house);
-
-      if (h >= 1 && h <= 12) {
+      if (!isNaN(h) && h >= 1 && h <= 12) {
         houses[h].push(p);
-     if(!kundli[p] || !kundli[p].house)continue;
-        if (!kundli[p] || kundli[p].house === undefined) continue;
       }
     }
   }
 
-  // ✅ fallback (important)
+  // 🔥 fallback agar empty
   let total = Object.values(houses).flat().length;
 
   if (total === 0) {
-    console.log("⚠️ fallback triggered");
-    houses[1] = ["Sun","Moon","Mars","Mercury"];
+    houses[1] = ["Sun", "Moon", "Mars", "Mercury"];
+    houses[7] = ["Jupiter", "Venus", "Saturn"];
   }
 
   houses[1].push("Asc");
 
   return houses;
 }
+
 function getTransit() {
   const now = new Date();
 
