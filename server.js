@@ -107,6 +107,19 @@ function convertToHouses(kundli) {
 
   return houses;
 }
+function getTransit() {
+  const now = new Date();
+
+  const jd = swe.swe_julday(
+    now.getFullYear(),
+    now.getMonth() + 1,
+    now.getDate(),
+    now.getHours(),
+    swe.SE_GREG_CAL
+  );
+
+  return getPlanets(jd);
+} 
 function getLagnaReal(jd, lat, lon) {
   let cusps = new Array(13);
   let ascmc = new Array(10);
