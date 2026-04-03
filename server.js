@@ -69,14 +69,6 @@ function getLagnaReal(jd, lat, lon) {
 const rashis = ["Aries","Taurus","Gemini","Cancer","Leo","Virgo","Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"];
 const getRashi = d => rashis[Math.floor(d / 30)];
 
-/* 🌙 NAKSHATRA */
-const nakshatras = ["Ashwini","Bharani","Krittika","Rohini","Mrigashira","Ardra","Punarvasu","Pushya","Ashlesha","Magha","Purva Phalguni","Uttara Phalguni","Hasta","Chitra","Swati","Vishakha","Anuradha","Jyeshtha","Mula","Purva Ashadha","Uttara Ashadha","Shravana","Dhanishta","Shatabhisha","Purva Bhadrapada","Uttara Bhadrapada","Revati"];
-
-function getNakshatraDetails(deg) {
-  const i = Math.floor(deg / (360/27));
-  return nakshatras[i];
-}
-
 /* 🏠 HOUSE */
 function getHouse(p, l) {
   let d = p - l;
@@ -103,8 +95,7 @@ function generateKundli(dob,time,place){
     k[p]={
       degree:planets[p],
       rashi:getRashi(planets[p]),
-      house:getHouse(planets[p],lagna),
-      nakshatra:getNakshatraDetails(planets[p])
+      house:getHouse(planets[p],lagna)
     };
   }
 
@@ -114,32 +105,7 @@ function generateKundli(dob,time,place){
   return k;
 }
 
-/* 🔥 SYMBOLS */
-const short = {
-  Sun:"Su",Moon:"Mo",Mars:"Ma",
-  Mercury:"Me",Jupiter:"Ju",
-  Venus:"Ve",Saturn:"Sa"
-};
-
-/* 🧿 CHART FIX */
-function convertToHouses(kundli){
-  let h={}; for(let i=1;i<=12;i++) h[i]=[];
-
-  for(let p in kundli){
-    if(kundli[p]?.house){
-      h[kundli[p].house].push(short[p]||p);
-    }
-  }
-
-  if(Object.values(h).flat().length===0){
-    h[1]=["Su","Mo","Ma"];
-  }
-
-  h[1].push("Asc");
-  return h;
-}
-
-/* 🧿 DRAW */
+/* 🧿 CHART */
 function drawKundliChart(k){
   const canvas=createCanvas(800,800);
   const ctx=canvas.getContext("2d");
@@ -147,45 +113,68 @@ function drawKundliChart(k){
   ctx.fillStyle="#fff";
   ctx.fillRect(0,0,800,800);
 
-  ctx.strokeRect(100,100,600,600);
+  ctx.strokeStyle="#000";
+  ctx.strokeRect(50,50,700,700);
 
-  const houses=convertToHouses(k);
+  ctx.font="20px Arial";
 
-  ctx.font="16px Arial";
-
-  for(let i=1;i<=12;i++){
-    ctx.fillText(houses[i].join(","),100+(i*40),400);
+  let y=100;
+  for(let p in k){
+    if(k[p].house){
+      ctx.fillText(`${p} (${k[p].house})`,100,y);
+      y+=30;
+    }
   }
 
-  return canvas.toBuffer();
+  return canvas.toBuffer("image/png");
 }
 
-/* 🔮 FULL ASTRO */
-function fullAstro(k){
-  let y=new Date().getFullYear();
+/* 📊 CHART API */
+app.post("/kundli-chart",(req,res)=>{
+  const {dob,time,place}=req.body;
+  const k=generateKundli(dob,time,place);
+  const img=drawKundliChart(k);
 
-  return `
-Past: struggle + learning
+  res.writeHead(200,{
+    "Content-Type":"image/png",
+    "Content-Length":img.length
+  });
 
-Present: ${k.Dasha}
+  res.end(img);
+});
 
-Future:
-Shaadi: ${y+2}
-Career: Growth
-Love: Mixed
-Money: Stable
-`;
-}
+/* 📥 DOWNLOAD FIXED */
+app.post("/download-kundli",(req,res)=>{
+  const {dob,time,place}=req.body;
+  const k=generateKundli(dob,time,place);
+  const img=drawKundliChart(k);
 
-/* 💬 CHAT */
+  res.setHeader("Content-Disposition","attachment; filename=kundli.png");
+  res.setHeader("Content-Type","image/png");
+  res.setHeader("Content-Length",img.length);
+
+  res.end(img);
+});
+
+/* 💬 CHAT FINAL */
 app.post("/chat", async (req,res)=>{
   const {message,dob,time,place}=req.body;
+
   const k=generateKundli(dob,time,place);
 
+  // 🔥 REAL BASIC ANSWER
   if(message.toLowerCase().includes("life")){
-    return res.json({reply:fullAstro(k)});
+    return res.json({
+      reply:`🔮 Aapki kundli ke hisaab se:
+
+Dasha: ${k.Dasha}
+Career: Growth phase
+Love: Mixed
+Shaadi: 2-3 saal me yog`
+    });
   }
 
+  // 🤖 AI fallback
   try{
     const r=await fetch("https://openrouter.ai/api/v1/chat/completions",{
       method:"POST",
@@ -203,20 +192,15 @@ app.post("/chat", async (req,res)=>{
     });
 
     const data=await r.json();
-    res.json({reply:data.choices[0].message.content});
+
+    res.json({
+      reply:data?.choices?.[0]?.message?.content || "🔮 Baba soch rahe hain..."
+    });
 
   }catch{
-    res.json({reply:"error"});
+    res.json({reply:"Server busy"});
   }
 });
 
-/* 📊 CHART */
-app.post("/kundli-chart",(req,res)=>{
-  const k=generateKundli(req.body.dob,req.body.time,req.body.place);
-  res.setHeader("Content-Type","image/png");
-  res.send(drawKundliChart(k));
-});
-
 /* 🚀 START */
-app.listen(3000,()=>console.log("🚀 Running"));
-
+app.listen(3000,"0.0.0.0",()=>console.log("🚀 Server running"));
