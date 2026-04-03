@@ -29,6 +29,35 @@ function getJulianDay(dob, time) {
   return swe.swe_julday(y, m, d, h + min / 60, swe.SE_GREG_CAL);
 }
 
+function getPlanets(jd) {
+  const planets = {
+    Sun: swe.SE_SUN,
+    Moon: swe.SE_MOON,
+    Mars: swe.SE_MARS,
+    Mercury: swe.SE_MERCURY,
+    Jupiter: swe.SE_JUPITER,
+    Venus: swe.SE_VENUS,
+    Saturn: swe.SE_SATURN
+  };
+
+  const ayan = swe.swe_get_ayanamsa(jd);
+  let result = {};
+
+  for (let p in planets) {
+    let xx = new Array(6);
+    let serr = "";
+
+    swe.swe_calc_ut(jd, planets[p], swe.SEFLG_SWIEPH, xx, serr);
+
+    let val = xx[0] - ayan;
+    if (val < 0) val += 360;
+
+    result[p] = val;
+  }
+
+  return result;
+}
+
 function convertToHouses(kundli) {
   let houses = {};
   for (let i = 1; i <= 12; i++) houses[i] = [];
