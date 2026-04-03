@@ -122,6 +122,24 @@ function getLagnaReal(jd, lat, lon) {
 
   return asc;
 }
+function getNakshatraDetails(deg) {
+  const nakshatras = [
+    "Ashwini","Bharani","Krittika","Rohini","Mrigashira","Ardra",
+    "Punarvasu","Pushya","Ashlesha","Magha","Purva Phalguni",
+    "Uttara Phalguni","Hasta","Chitra","Swati","Vishakha",
+    "Anuradha","Jyeshtha","Mula","Purva Ashadha","Uttara Ashadha",
+    "Shravana","Dhanishta","Shatabhisha","Purva Bhadrapada",
+    "Uttara Bhadrapada","Revati"
+  ];
+
+  const i = Math.floor(deg / (360/27));
+  const p = Math.floor((deg % (360/27)) / (360/108)) + 1;
+
+  return {
+    nakshatra: nakshatras[i] || "Ashwini",
+    pada: p || 1
+  };
+}
 /* ♈ RASHI */
 const rashis = ["Aries","Taurus","Gemini","Cancer","Leo","Virgo","Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"];
 const getRashi = d => rashis[Math.floor(d / 30)];
