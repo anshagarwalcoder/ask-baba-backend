@@ -140,6 +140,20 @@ function getNakshatraDetails(deg) {
     pada: p || 1
   };
 }
+
+function getNavamsa(deg) {
+  const rashis = [
+    "Aries","Taurus","Gemini","Cancer","Leo","Virgo",
+    "Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"
+  ];
+
+  const signIndex = Math.floor(deg / 30);
+  const navamsaIndex = Math.floor((deg % 30) / (30 / 9));
+
+  return rashis[(signIndex * 9 + navamsaIndex) % 12];
+}
+
+
 /* ♈ RASHI */
 const rashis = ["Aries","Taurus","Gemini","Cancer","Leo","Virgo","Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"];
 const getRashi = d => rashis[Math.floor(d / 30)];
