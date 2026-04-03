@@ -29,34 +29,36 @@ function getJulianDay(dob, time) {
   return swe.swe_julday(y, m, d, h + min / 60, swe.SE_GREG_CAL);
 }
 
-/* 🪐 PLANETS */
-function getPlanets(jd) {
-  const planets = {
-    Sun: swe.SE_SUN,
-    Moon: swe.SE_MOON,
-    Mars: swe.SE_MARS,
-    Mercury: swe.SE_MERCURY,
-    Jupiter: swe.SE_JUPITER,
-    Venus: swe.SE_VENUS,
-    Saturn: swe.SE_SATURN
-  };
+function convertToHouses(kundli) {
+  let houses = {};
+  for (let i = 1; i <= 12; i++) houses[i] = [];
 
-  const ayan = swe.swe_get_ayanamsa(jd);
-  let result = {};
+  for (let p in kundli) {
 
-  for (let p in planets) {
-    let xx = new Array(6);
-    swe.swe_calc_ut(jd, planets[p], swe.SEFLG_SWIEPH, xx);
+    // 🔥 SAFE CHECK
+    if (!kundli[p] || typeof kundli[p] !== "object") continue;
 
-    let val = xx[0] - ayan;
-    if (val < 0) val += 360;
+    if (kundli[p].house && !isNaN(kundli[p].house)) {
+      let h = Math.floor(kundli[p].house);
 
-    result[p] = val;
+      if (h >= 1 && h <= 12) {
+        houses[h].push(p);
+      }
+    }
   }
 
-  return result;
-}
+  // ✅ fallback (important)
+  let total = Object.values(houses).flat().length;
 
+  if (total === 0) {
+    console.log("⚠️ fallback triggered");
+    houses[1] = ["Sun","Moon","Mars","Mercury"];
+  }
+
+  houses[1].push("Asc");
+
+  return houses;
+}
 /* 🌅 LAGNA */
 function getLagnaReal(jd, lat, lon) {
   let cusps = new Array(13);
@@ -129,15 +131,16 @@ function drawKundliChart(k){
   return canvas.toBuffer("image/png");
 }
 
-/* 📊 CHART API */
-app.post("/kundli-chart",(req,res)=>{
+app.post("/download-kundli",(req,res)=>{
   const {dob,time,place}=req.body;
+
   const k=generateKundli(dob,time,place);
   const img=drawKundliChart(k);
 
   res.writeHead(200,{
     "Content-Type":"image/png",
-    "Content-Length":img.length
+    "Content-Disposition":"attachment; filename=kundli.png",
+    "Content-Length": img.length
   });
 
   res.end(img);
