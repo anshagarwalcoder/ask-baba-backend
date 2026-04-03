@@ -120,6 +120,9 @@ function generateKundli(dob,time,place){
   const planets=getPlanets(jd);
   const lagna=getLagnaReal(jd,lat,lon);
 
+  console.log("PLANETS:", planets);
+console.log("LAGNA:", lagna);
+  
   let k={};
 
   for(let p in planets){
