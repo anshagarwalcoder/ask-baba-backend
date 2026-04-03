@@ -4,9 +4,9 @@ const { createCanvas } = require("canvas");
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 const swe = require("swisseph");
-
 const path = require("path");
 
+// Ephemeris Setup
 swe.swe_set_ephe_path(path.join(__dirname, "ephe"));
 swe.swe_set_sid_mode(swe.SE_SIDM_LAHIRI);
 
@@ -15,312 +15,194 @@ app.use(cors());
 app.use(express.json());
 
 app.get("/", (req, res) => {
-  res.send("🚀 Ask Baba Backend Running");
+  res.send("🚀 Ask Baba Backend is Live and Powerful");
 });
 
-/* 🌍 LOCATION */
+/* 🌍 LOCATION DATABASE */
 const locationMap = {
-  Agra: { lat: 27.1767, lon: 78.0081 },
-  Delhi: { lat: 28.6139, lon: 77.2090 }
+  "Agra": { lat: 27.1767, lon: 78.0081 },
+  "Delhi": { lat: 28.6139, lon: 77.2090 },
+  "Mumbai": { lat: 19.0760, lon: 72.8777 },
+  "Bangalore": { lat: 12.9716, lon: 77.5946 },
+  "Kolkata": { lat: 22.5726, lon: 88.3639 }
 };
 
-/* 🔢 JULIAN */
+/* 🔢 CALCULATION HELPERS */
 function getJulianDay(dob, time) {
   const [d, m, y] = dob.split("/").map(Number);
   const [h, min] = time.split(":").map(Number);
   return swe.swe_julday(y, m, d, h + min / 60, swe.SE_GREG_CAL);
 }
 
+const rashis = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"];
 
 function getPlanets(jd) {
-  const planets = {
-    Sun: swe.SE_SUN,
-    Moon: swe.SE_MOON,
-    Mars: swe.SE_MARS,
-    Mercury: swe.SE_MERCURY,
-    Jupiter: swe.SE_JUPITER,
-    Venus: swe.SE_VENUS,
-    Saturn: swe.SE_SATURN
+  const planetsMap = {
+    Sun: swe.SE_SUN, Moon: swe.SE_MOON, Mars: swe.SE_MARS,
+    Mercury: swe.SE_MERCURY, Jupiter: swe.SE_JUPITER,
+    Venus: swe.SE_VENUS, Saturn: swe.SE_SATURN, Rahu: swe.SE_MEAN_NODE
   };
 
   let result = {};
-
-  for (let p in planets) {
+  for (let p in planetsMap) {
     let xx = new Array(6);
     let serr = "";
-
-    // Try SWIEPH first
-    swe.swe_calc_ut(jd, planets[p], swe.SEFLG_SWIEPH, xx, serr);
-
-    let val = xx[0];
-
-    // fallback to MOSEPH if NaN
-    if (isNaN(val)) {
-      console.log("⚠️ Using MOSEPH for", p);
-      swe.swe_calc_ut(jd, planets[p], swe.SEFLG_MOSEPH, xx, serr);
-      val = xx[0];
-    }
-
-    // FINAL fallback (important 🔥)
-    if (isNaN(val)) {
-      console.log("❌ Still NaN:", p);
-      val = Math.random() * 360; // fake but prevents crash
-    }
-
-    result[p] = val;
+    // Using Sidereal (Vedic) flag
+    swe.swe_calc_ut(jd, planetsMap[p], swe.SEFLG_SWIEPH | swe.SEFLG_SIDEREAL, xx, serr);
+    result[p] = { deg: xx[0] };
   }
-
   return result;
 }
 
-
-function convertToHouses(kundli) {
-  let houses = {};
-  for (let i = 1; i <= 12; i++) houses[i] = [];
-
-  for (let p in kundli) {
-    if (kundli[p] && kundli[p].house) {
-      let h = kundli[p].house;
-
-      if (!isNaN(h) && h >= 1 && h <= 12) {
-        houses[h].push(p);
-      }
-    }
-  }
-
-  // 🔥 fallback agar empty
-  let total = Object.values(houses).flat().length;
-
-  if (total === 0) {
-    houses[1] = ["Sun", "Moon", "Mars", "Mercury"];
-    houses[7] = ["Jupiter", "Venus", "Saturn"];
-  }
-
-  houses[1].push("Asc");
-
-  return houses;
-}
-
-function getTransit() {
-  const now = new Date();
-
-  const jd = swe.swe_julday(
-    now.getFullYear(),
-    now.getMonth() + 1,
-    now.getDate(),
-    now.getHours(),
-    swe.SE_GREG_CAL
-  );
-
-  return getPlanets(jd);
-} 
-function getLagnaReal(jd, lat, lon) {
+function getLagna(jd, lat, lon) {
   let cusps = new Array(13);
   let ascmc = new Array(10);
-
-  swe.swe_houses(jd, lat, lon, "P", cusps, ascmc);
-
-  let asc = ascmc[0];
-
-  if (!asc || isNaN(asc)) {
-    console.log("⚠️ Lagna fallback used");
-    return 1; // fallback (Aries)
-  }
-
-  return asc;
-}
-function getNakshatraDetails(deg) {
-  const nakshatras = [
-    "Ashwini","Bharani","Krittika","Rohini","Mrigashira","Ardra",
-    "Punarvasu","Pushya","Ashlesha","Magha","Purva Phalguni",
-    "Uttara Phalguni","Hasta","Chitra","Swati","Vishakha",
-    "Anuradha","Jyeshtha","Mula","Purva Ashadha","Uttara Ashadha",
-    "Shravana","Dhanishta","Shatabhisha","Purva Bhadrapada",
-    "Uttara Bhadrapada","Revati"
-  ];
-
-  const i = Math.floor(deg / (360/27));
-  const p = Math.floor((deg % (360/27)) / (360/108)) + 1;
-
-  return {
-    nakshatra: nakshatras[i] || "Ashwini",
-    pada: p || 1
-  };
+  swe.swe_houses_ex(jd, swe.SEFLG_SIDEREAL, lat, lon, 'P', cusps, ascmc);
+  return ascmc[0];
 }
 
-function getNavamsa(deg) {
-  const rashis = [
-    "Aries","Taurus","Gemini","Cancer","Leo","Virgo",
-    "Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"
-  ];
+/* 🔮 KUNDLI GENERATION LOGIC */
+function generateKundli(dob, time, place) {
+  const loc = locationMap[place] || locationMap["Delhi"];
+  const jd = getJulianDay(dob, time);
+  const planetsRaw = getPlanets(jd);
+  const lagnaDeg = getLagna(jd, loc.lat, loc.lon);
 
-  const signIndex = Math.floor(deg / 30);
-  const navamsaIndex = Math.floor((deg % 30) / (30 / 9));
+  let k = { Planets: {}, Houses: {} };
+  const lagnaSign = Math.floor(lagnaDeg / 30) + 1;
 
-  return rashis[(signIndex * 9 + navamsaIndex) % 12];
-}
-
-
-/* ♈ RASHI */
-const rashis = ["Aries","Taurus","Gemini","Cancer","Leo","Virgo","Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"];
-const getRashi = d => rashis[Math.floor(d / 30)];
-
-/* 🏠 HOUSE */
-function getHouse(p, l) {
-  let d = p - l;
-  if (d < 0) d += 360;
-  return Math.floor(d / 30) + 1;
-}
-
-/* 🔮 DASHA */
-const dashaOrder = ["Ketu","Venus","Sun","Moon","Mars","Rahu","Jupiter","Saturn","Mercury"];
-function getMahadasha(moonDeg){
-  return dashaOrder[Math.floor(moonDeg/(360/27))%9];
-}
-
-/* 🔮 KUNDLI */
-function generateKundli(dob,time,place){
-  const {lat,lon} = locationMap[place]||locationMap["Agra"];
-  const jd=getJulianDay(dob,time);
-  const planets=getPlanets(jd);
-  const lagna=getLagnaReal(jd,lat,lon);
-
-  let k={};
-
-  for(let p in planets){
-    const nak=getNakshatraDetails(planets[p]);
-
-    k[p]={
-      degree:planets[p],
-      rashi:getRashi(planets[p]),
-      house:getHouse(planets[p],lagna),
-      nakshatra:nak.nakshatra,
-      pada:nak.pada,
-      navamsa:getNavamsa(planets[p])
+  for (let p in planetsRaw) {
+    let pDeg = planetsRaw[p].deg;
+    let rashiIdx = Math.floor(pDeg / 30);
+    // Calculate House (Bhav) relative to Lagna
+    let house = Math.floor((pDeg - (lagnaSign-1)*30 + 360) % 360 / 30) + 1;
+    
+    k.Planets[p] = {
+      degree: pDeg.toFixed(2),
+      rashi: rashis[rashiIdx],
+      house: house
     };
+    
+    if(!k.Houses[house]) k.Houses[house] = [];
+    k.Houses[house].push(p);
   }
 
-  k.Lagna={degree:lagna,rashi:getRashi(lagna)};
-  k.Dasha=getMahadasha(k.Moon.degree);
-  k.Transit=getTransit();
-
-  // ✅ YAHI DAALNA HAI (END ME)
-  if (!k.Moon || isNaN(k.Moon.degree)) {
-    console.log("⚠️ Invalid kundli fallback used");
-
-    for (let p in k) {
-      if (k[p]?.degree === undefined || isNaN(k[p].degree)) {
-        k[p] = {
-          degree: 0,
-          rashi: "Aries",
-          house: 1,
-          nakshatra: "Ashwini",
-          pada: 1,
-          navamsa: "Aries"
-        };
-      }
-    }
-  }
-
+  k.Lagna = { degree: lagnaDeg.toFixed(2), rashi: rashis[lagnaSign-1], signNum: lagnaSign };
   return k;
 }
-/* 🧿 CHART */
-function drawKundliChart(k){
-  const canvas=createCanvas(800,800);
-  const ctx=canvas.getContext("2d");
 
-  ctx.fillStyle="#fff";
-  ctx.fillRect(0,0,800,800);
+/* 🎨 DRAWING THE KUNDLI (NORTH INDIAN STYLE) */
+function drawKundliChart(k) {
+  const canvas = createCanvas(600, 600);
+  const ctx = canvas.getContext("2d");
 
-  ctx.strokeStyle="#000";
-  ctx.strokeRect(50,50,700,700);
+  // Background
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, 600, 600);
 
-  ctx.font="20px Arial";
+  // Draw Kundli Square & Lines
+  ctx.strokeStyle = "#b30000"; // Vedic Red
+  ctx.lineWidth = 3;
+  ctx.strokeRect(50, 50, 500, 500);
 
-  let y=100;
-  for(let p in k){
-    if(k[p].house){
-      ctx.fillText(`${p} (${k[p].house})`,100,y);
-      y+=30;
-    }
+  ctx.beginPath();
+  // Diagonals
+  ctx.moveTo(50, 50); ctx.lineTo(550, 550);
+  ctx.moveTo(550, 50); ctx.lineTo(50, 550);
+  // Diamond
+  ctx.moveTo(300, 50); ctx.lineTo(50, 300);
+  ctx.lineTo(300, 550); ctx.lineTo(550, 300);
+  ctx.lineTo(300, 50);
+  ctx.stroke();
+
+  // Draw Planet Names in Houses
+  ctx.fillStyle = "#000";
+  ctx.font = "14px Arial";
+  ctx.textAlign = "center";
+
+  const houseCoords = {
+    1: [300, 180], 2: [200, 100], 3: [100, 200], 4: [180, 300],
+    5: [100, 400], 6: [200, 500], 7: [300, 420], 8: [400, 500],
+    9: [500, 400], 10: [420, 300], 11: [500, 200], 12: [400, 100]
+  };
+
+  for (let h in houseCoords) {
+    let pList = k.Houses[h] || [];
+    let text = pList.join(", ");
+    ctx.fillText(text, houseCoords[h][0], houseCoords[h][1]);
   }
+
+  // Draw Lagna Sign Number in the first house
+  ctx.fillStyle = "#b30000";
+  ctx.font = "bold 18px Arial";
+  ctx.fillText(k.Lagna.signNum, 300, 210);
 
   return canvas.toBuffer("image/png");
 }
 
-app.post("/download-kundli",(req,res)=>{
-  const {dob,time,place}=req.body;
+/* 📥 DOWNLOAD ENDPOINT */
+app.post("/download-kundli", (req, res) => {
+  try {
+    const { dob, time, place } = req.body;
+    if(!dob || !time) return res.status(400).send("Details missing");
 
-  const k=generateKundli(dob,time,place);
-  const img=drawKundliChart(k);
+    const k = generateKundli(dob, time, place);
+    const imgBuffer = drawKundliChart(k);
 
-  res.writeHead(200,{
-    "Content-Type":"image/png",
-    "Content-Disposition":"attachment; filename=kundli.png",
-    "Content-Length": img.length
-  });
-
-  res.end(img);
-});
-
-/* 📥 DOWNLOAD FIXED */
-app.post("/download-kundli",(req,res)=>{
-  const {dob,time,place}=req.body;
-  const k=generateKundli(dob,time,place);
-  const img=drawKundliChart(k);
-
-  res.setHeader("Content-Disposition","attachment; filename=kundli.png");
-  res.setHeader("Content-Type","image/png");
-  res.setHeader("Content-Length",img.length);
-
-  res.end(img);
-});
-
-/* 💬 CHAT FINAL */
-app.post("/chat", async (req,res)=>{
-  const {message,dob,time,place}=req.body;
-
-  const k=generateKundli(dob,time,place);
-
-  // 🔥 REAL BASIC ANSWER
-  if(message.toLowerCase().includes("life")){
-    return res.json({
-      reply:`🔮 Aapki kundli ke hisaab se:
-
-Dasha: ${k.Dasha}
-Career: Growth phase
-Love: Mixed
-Shaadi: 2-3 saal me yog`
-    });
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Content-Disposition", "attachment; filename=my_kundli.png");
+    res.send(imgBuffer);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Error generating Kundli");
   }
+});
 
-  // 🤖 AI fallback
-  try{
-    const r=await fetch("https://openrouter.ai/api/v1/chat/completions",{
-      method:"POST",
-      headers:{
-        "Authorization":`Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "Content-Type":"application/json"
+/* 💬 CHAT (BABA AI) */
+app.post("/chat", async (req, res) => {
+  const { message, dob, time, place } = req.body;
+
+  try {
+    const k = generateKundli(dob, time, place);
+
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json"
       },
-      body:JSON.stringify({
-        model:"openai/gpt-4o-mini",
-        messages:[
-          {role:"system",content:JSON.stringify(k)},
-          {role:"user",content:message}
+      body: JSON.stringify({
+        model: "openai/gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `You are 'Ask Baba', a legendary Indian Vedic Astrologer. 
+            Use this Kundli Data: ${JSON.stringify(k)}. 
+            Your personality:
+            - Speak in a mix of Hindi and English (Hinglish).
+            - Use words like 'Beta', 'Shani ki drishti', 'Yog', 'Ashirwad'.
+            - Give deep, specific predictions about Career, Marriage, and Health based on planet houses.
+            - If Shani (Saturn) or Rahu is in a tough house, warn them and give a simple remedy (Upay).
+            - Be 100% confident and mystical.`
+          },
+          { role: "user", content: message }
         ]
       })
     });
 
-    const data=await r.json();
-
+    const data = await response.json();
     res.json({
-      reply:data?.choices?.[0]?.message?.content || "🔮 Baba soch rahe hain..."
+      reply: data?.choices?.[0]?.message?.content || "Baba abhi dhyan mein hain, thodi der baad puchiye."
     });
 
-  }catch{
-    res.json({reply:"Server busy"});
+  } catch (err) {
+    console.error(err);
+    res.json({ reply: "Beta, server mein thoda dosh hai. Phir se koshish karo." });
   }
 });
 
-/* 🚀 START */
-app.listen(3000,"0.0.0.0",()=>console.log("🚀 Server running"));
+/* 🚀 START SERVER */
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Ask Baba is running on port ${PORT}`);
+});
