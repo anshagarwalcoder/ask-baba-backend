@@ -56,6 +56,12 @@ function getPlanets(jd) {
     if (!val || isNaN(val)) {
       console.log("⚠️ SWIEPH failed, switching to MOSEPH");
 
+      if (!xx || isNaN(xx[0])) {
+  console.log("❌ Planet calc failed:", p);
+  result[p] = 0; // fallback
+  continue;
+}
+
       // 🔥 AUTO FALLBACK
       swe.swe_calc_ut(jd, planets[p], swe.SEFLG_MOSEPH, xx, serr);
       val = xx[0];
@@ -84,6 +90,7 @@ function convertToHouses(kundli) {
       if (h >= 1 && h <= 12) {
         houses[h].push(p);
      if(!kundli[p] || !kundli[p].house)continue;
+        if (!kundli[p] || kundli[p].house === undefined) continue;
       }
     }
   }
@@ -156,6 +163,22 @@ console.log("LAGNA:", lagna);
   k.Dasha=getMahadasha(k.Moon.degree);
 
   return k;
+}
+if (!k.Moon || isNaN(k.Moon.degree)) {
+  console.log("⚠️ Invalid kundli fallback used");
+
+  for (let p in k) {
+    if (k[p]?.degree === undefined || isNaN(k[p].degree)) {
+      k[p] = {
+        degree: 0,
+        rashi: "Aries",
+        house: 1,
+        nakshatra: "Ashwini",
+        pada: 1,
+        navamsa: "Aries"
+      };
+    }
+  }
 }
 
 /* 🧿 CHART */
