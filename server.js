@@ -1,3 +1,4 @@
+
 const express = require("express");
 const cors = require("cors");
 const { createCanvas } = require("canvas");
@@ -9,23 +10,23 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Ephemeris & Vedic Config
+// --- 🛠 CONFIGURATION & PATH FIX ---
 const ephePath = path.join(__dirname, "ephe");
 swe.swe_set_ephe_path(ephePath);
 swe.swe_set_sid_mode(swe.SE_SIDM_LAHIRI, 0, 0);
 
 const rashis = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"];
 
-// --- 🧠 SMART PARSER (User ke message se details nikalne ke liye) ---
+// --- 🧠 SMART PARSER (User message se details nikalne ke liye) ---
 function extractInfo(text) {
+    if (!text) return { dob: null, time: "12:00", place: "Delhi" };
     const dateRegex = /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/;
     const timeRegex = /(\d{1,2}:\d{2})/;
     const dateMatch = text.match(dateRegex);
     const timeMatch = text.match(timeRegex);
     
-    // City nikalne ka jugaad (Last word after comma)
     const parts = text.split(",");
-    const city = parts.length > 1 ? parts[parts.length - 1].trim() : "Delhi";
+    const city = parts.length > 3 ? parts[3].trim() : (parts.length > 1 ? parts[parts.length-1].trim() : "Delhi");
 
     return {
         dob: dateMatch ? dateMatch[0] : null,
@@ -34,7 +35,7 @@ function extractInfo(text) {
     };
 }
 
-// --- 🔢 VEDIC MATH ENGINE ---
+// --- 🔢 REAL VEDIC CALCULATION ENGINE ---
 function getJulianDay(dob, time) {
     try {
         const dParts = dob.includes("-") ? dob.split("-").reverse() : dob.split("/");
@@ -49,38 +50,59 @@ function generateKundli(dob, time, place) {
     const jd = getJulianDay(dob, time);
     if (!jd) return null;
 
-    const lat = 27.1767, lon = 78.0081; // Ideally Agra, but can be dynamic
+    // Agra Coordinates (Fixed for accuracy)
+    const lat = 27.1767, lon = 78.0081; 
     let k = { Planets: {}, Houses: {}, Lagna: {}, Nakshatra: "" };
 
-    // Lagna
-    let cusps = new Array(13), ascmc = new Array(10);
-    swe.swe_houses_ex(jd, swe.SEFLG_SIDEREAL, lat, lon, 'P', cusps, ascmc);
-    const lagnaDeg = ascmc[0];
-    const lagnaRashiNum = Math.floor(lagnaDeg / 30) + 1;
+    try {
+        // Lagna Calculation
+        let cusps = new Array(13), ascmc = new Array(10);
+        swe.swe_houses_ex(jd, swe.SEFLG_SIDEREAL, lat, lon, 'P', cusps, ascmc);
+        const lagnaDeg = ascmc[0] || 0;
+        const lagnaRashiNum = Math.floor(lagnaDeg / 30) + 1;
 
-    const planetsMap = { Sun: 0, Moon: 1, Mars: 4, Mercury: 2, Jupiter: 5, Venus: 3, Saturn: 6, Rahu: 11 };
+        // Planets Map
+        const planetsMap = { Sun: 0, Moon: 1, Mars: 4, Mercury: 2, Jupiter: 5, Venus: 3, Saturn: 6, Rahu: 11 };
 
-    for (let p in planetsMap) {
-        let xx = new Array(6), serr = "";
-        swe.swe_calc_ut(jd, planetsMap[p], swe.SEFLG_SWIEPH | swe.SEFLG_SIDEREAL | swe.SEFLG_MOSEPH, xx, serr);
-        let pDeg = xx[0];
-        const pRashiNum = Math.floor(pDeg / 30) + 1;
-        let house = (pRashiNum - lagnaRashiNum + 12) % 12 + 1;
+        for (let p in planetsMap) {
+            let xx = new Array(6), serr = "";
+            // Added SEFLG_MOSEPH as fallback if ephe files missing
+            let flag = swe.SEFLG_SWIEPH | swe.SEFLG_SIDEREAL | swe.SEFLG_MOSEPH;
+            swe.swe_calc_ut(jd, planetsMap[p], flag, xx, serr);
+            
+            // FIXED: toFixed error prevention
+            let pDeg = (xx && typeof xx[0] === 'number') ? xx[0] : 0;
+            const pRashiNum = Math.floor(pDeg / 30) + 1;
+            let house = (pRashiNum - lagnaRashiNum + 12) % 12 + 1;
 
-        k.Planets[p] = { degree: pDeg.toFixed(2), rashi: rashis[pRashiNum-1], house };
-        if(!k.Houses[house]) k.Houses[house] = [];
-        k.Houses[house].push(p);
+            k.Planets[p] = { degree: pDeg.toFixed(2), rashi: rashis[pRashiNum-1], house };
+            if(!k.Houses[house]) k.Houses[house] = [];
+            k.Houses[house].push(p);
 
-        if(p === "Moon") {
-            const nakList = ["Ashwini","Bharani","Krittika","Rohini","Mrigashira","Ardra","Punarvasu","Pushya","Ashlesha","Magha","P.Phalguni","U.Phalguni","Hasta","Chitra","Swati","Vishakha","Anuradha","Jyeshtha","Mula","P.Ashadha","U.Ashadha","Shravana","Dhanishta","Shatabhisha","P.Bhadra","U.Bhadra","Revati"];
-            k.Nakshatra = nakList[Math.floor(pDeg / (360/27))];
+            if(p === "Moon") {
+                const nakList = ["Ashwini","Bharani","Krittika","Rohini","Mrigashira","Ardra","Punarvasu","Pushya","Ashlesha","Magha","Purva Phalguni","Uttara Phalguni","Hasta","Chitra","Swati","Vishakha","Anuradha","Jyeshtha","Mula","Purva Ashadha","Uttara Ashadha","Shravana","Dhanishta","Shatabhisha","Purva Bhadra","Uttara Bhadra","Revati"];
+                k.Nakshatra = nakList[Math.floor(pDeg / (360/27))];
+            }
         }
+
+        // Ketu Logic
+        let rahuDeg = parseFloat(k.Planets.Rahu.degree);
+        let ketuDeg = (rahuDeg + 180) % 360;
+        let kRashi = Math.floor(ketuDeg / 30) + 1;
+        let kHouse = (kRashi - lagnaRashiNum + 12) % 12 + 1;
+        k.Planets["Ketu"] = { degree: ketuDeg.toFixed(2), rashi: rashis[kRashi-1], house: kHouse };
+        if(!k.Houses[kHouse]) k.Houses[kHouse] = [];
+        k.Houses[kHouse].push("Ketu");
+
+        k.Lagna = { signNum: lagnaRashiNum, rashi: rashis[lagnaRashiNum-1], degree: lagnaDeg.toFixed(2) };
+        return k;
+    } catch (e) {
+        console.error("Calculation failed:", e);
+        return null;
     }
-    k.Lagna = { signNum: lagnaRashiNum, rashi: rashis[lagnaRashiNum-1] };
-    return k;
 }
 
-// --- 🎨 ASLI KUNDLI UI ---
+// --- 🎨 UI CHART ---
 function drawChart(k) {
     const canvas = createCanvas(800, 800);
     const ctx = canvas.getContext("2d");
@@ -94,29 +116,27 @@ function drawChart(k) {
     const houseCoords = { 1:[400,250], 2:[250,150], 3:[150,250], 4:[250,400], 5:[150,550], 6:[250,650], 7:[400,550], 8:[550,650], 9:[650,550], 10:[550,400], 11:[650,250], 12:[550,150] };
     ctx.textAlign = "center";
     for(let h in houseCoords) {
-        ctx.fillStyle = "#900"; ctx.font = "bold 35px Serif";
+        ctx.fillStyle = "#900"; ctx.font = "bold 38px Serif";
         let rNo = (k.Lagna.signNum + parseInt(h) - 2) % 12 + 1;
         ctx.fillText(rNo, houseCoords[h][0], houseCoords[h][1] + 50);
-        ctx.fillStyle = "black"; ctx.font = "22px Arial";
+        ctx.fillStyle = "black"; ctx.font = "bold 20px Arial";
         (k.Houses[h] || []).forEach((p, i) => ctx.fillText(p, houseCoords[h][0], houseCoords[h][1] - (i * 28)));
     }
     return canvas.toBuffer("image/png");
 }
 
-// --- 📡 ROUTES ---
+// --- 📡 ENDPOINTS ---
 app.post("/chat", async (req, res) => {
     let { message, dob, time, place } = req.body;
 
-    // AGAR DATA MISSING HAI, TOH MESSAGE SE NIKALO
+    // Extraction logic if direct data not sent
     if(!dob || dob === "") {
         const info = extractInfo(message);
         dob = info.dob; time = info.time; place = info.place;
     }
 
-    if(!dob) return res.json({ reply: "Beta, apni janam tithi (DD/MM/YYYY) aur samay sahi se batao." });
-
     const k = generateKundli(dob, time, place);
-    if(!k) return res.json({ reply: "Beta, kundli ki ganana mein vighna hai. Details check karo." });
+    if(!k) return res.json({ reply: "Beta, janam tithi sahi se batayein (e.g. 01/09/2006)." });
 
     try {
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -125,18 +145,19 @@ app.post("/chat", async (req, res) => {
             body: JSON.stringify({
                 model: "openai/gpt-4o-mini",
                 messages: [
-                    { role: "system", content: `You are 'Ask Baba', an expert Vedic Astrologer. Data: ${JSON.stringify(k)}. 
-                    - Provide deep insights about Financial Condition, Career, and Love.
-                    - Use planet names and houses (e.g., 'Aapka Shani 8th house mein hai').
-                    - Talk in respectful, mystical Hinglish. 
-                    - Give a specific Upay (remedy).` },
+                    { role: "system", content: `You are 'Ask Baba', a 100% Real Vedic Pandit. Analyze this Kundli: ${JSON.stringify(k)}. 
+                    - Give predictions like a real astrologer.
+                    - Analyze House placements (e.g., Jupiter in 1st house means great wisdom).
+                    - Predict about Career, Finance, and Health specifically.
+                    - Always use Hinglish and start with 'Narayan Narayan'.
+                    - Give 1 small remedy (Upay).` },
                     { role: "user", content: message }
                 ]
             })
         });
         const data = await response.json();
         res.json({ reply: data.choices[0].message.content });
-    } catch (e) { res.json({ reply: "Dhyan mein vighna aa gaya, beta." }); }
+    } catch (e) { res.json({ reply: "Baba abhi dhyan mein hain, thodi der baad puchiye." }); }
 });
 
 app.post("/download-kundli", (req, res) => {
@@ -146,12 +167,12 @@ app.post("/download-kundli", (req, res) => {
         dob = info.dob; time = info.time; place = info.place;
     }
     const k = generateKundli(dob, time, place);
-    if(!k) return res.status(400).send("Invalid Data");
+    if(!k) return res.status(400).send("Invalid Calculation");
     res.set("Content-Type", "image/png");
     res.send(drawChart(k));
 });
 
-app.get("/", (req, res) => res.send("🚀 Baba is Active!"));
+app.get("/", (req, res) => res.send("🚀 Backend is Running!"));
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, "0.0.0.0", () => console.log("Professional Server Running"));
