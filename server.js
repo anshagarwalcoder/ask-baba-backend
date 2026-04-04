@@ -1,18 +1,19 @@
 import express from "express";
 import bodyParser from "body-parser";
 import fetch from "node-fetch";
-import fs from "fs";
-import path from "path";
 import { createCanvas } from "canvas";
 
 const app = express();
 app.use(bodyParser.json());
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
-// ================== BASIC FAKE SAFE KUNDLI ==================
-// (jab Swiss Ephemeris fail ho tab bhi app crash na ho)
+// ================= ROOT FIX (Cannot GET fix) =================
+app.get("/", (req, res) => {
+  res.send("🚀 Ask Baba Backend Running Successfully");
+});
 
+// ================= SAFE KUNDLI =================
 function generateKundli(dob, time, place) {
   return {
     Sun: { rashi: "Leo", house: 1 },
@@ -26,19 +27,15 @@ function generateKundli(dob, time, place) {
   };
 }
 
-// ================== DRAW KUNDLI ==================
-
+// ================= DRAW IMAGE =================
 function drawKundliChart(kundli) {
   const canvas = createCanvas(800, 800);
   const ctx = canvas.getContext("2d");
 
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, 800, 800);
 
   ctx.strokeStyle = "#000";
-  ctx.lineWidth = 2;
-
-  // outer box
   ctx.strokeRect(50, 50, 700, 700);
 
   ctx.font = "20px Arial";
@@ -48,67 +45,62 @@ function drawKundliChart(kundli) {
   for (let p in kundli) {
     if (p === "Lagna") continue;
 
-    const data = kundli[p];
+    const d = kundli[p];
 
-    ctx.fillText(
-      `${p}: ${data.rashi} (H${data.house})`,
-      80,
-      y
-    );
-
+    ctx.fillText(`${p}: ${d.rashi} (H${d.house})`, 80, y);
     y += 40;
   }
 
   return canvas.toBuffer("image/png");
 }
 
-// ================== OPENROUTER AI ==================
-
+// ================= OPENROUTER =================
 async function getAIResponse(prompt) {
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: "mistralai/mistral-7b-instruct",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a professional Vedic astrologer. Give logical and real answers only."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ]
-    })
-  });
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "mistralai/mistral-7b-instruct",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a Vedic astrologer. Give logical, real answers. Do not guess."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ]
+      })
+    });
 
-  const data = await res.json();
+    const data = await res.json();
 
-  return data?.choices?.[0]?.message?.content || "No response";
+    return data?.choices?.[0]?.message?.content || "No AI response";
+  } catch (e) {
+    console.log("AI ERROR:", e);
+    return "AI failed";
+  }
 }
 
-// ================== FORMAT ==================
-
-function formatKundliForAI(k) {
-  let text = "Kundli Data:\n";
+// ================= FORMAT =================
+function formatKundli(k) {
+  let text = "";
 
   for (let p in k) {
     if (p === "Lagna") continue;
-
     text += `${p} in ${k[p].rashi}, House ${k[p].house}\n`;
   }
 
   return text;
 }
 
-// ================== ROUTES ==================
-
-// 👉 Download Kundli Image
+// ================= DOWNLOAD API =================
 app.post("/download-kundli", (req, res) => {
   try {
     const { dob, time, place } = req.body;
@@ -124,39 +116,35 @@ app.post("/download-kundli", (req, res) => {
 
     res.send(img);
   } catch (e) {
-    console.log(e);
+    console.log("DOWNLOAD ERROR:", e);
     res.status(500).send("Download failed");
   }
 });
 
-// 👉 AI Answer
+// ================= AI API =================
 app.post("/ask-ai", async (req, res) => {
   try {
     const { dob, time, place, question } = req.body;
 
     const kundli = generateKundli(dob, time, place);
 
-    const kundliText = formatKundliForAI(kundli);
-
     const prompt = `
-${kundliText}
+Kundli:
+${formatKundli(kundli)}
 
-User Question: ${question}
-
-Give accurate astrology answer.
+Question: ${question}
 `;
 
     const answer = await getAIResponse(prompt);
 
     res.json({ answer });
   } catch (e) {
-    console.log(e);
+    console.log("AI ROUTE ERROR:", e);
     res.status(500).send("AI error");
   }
 });
 
-// ================== START ==================
-
+// ================= START =================
 app.listen(PORT, () => {
-  console.log("Server running on port", PORT);
+  console.log("🔥 Server running on port", PORT);
 });
